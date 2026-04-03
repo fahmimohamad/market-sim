@@ -81,12 +81,13 @@
 
   .radio-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
   .radio-opt {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
     background: var(--bg2); border-radius: 8px; border: 2px solid var(--border);
     cursor: pointer; transition: border-color 0.2s;
   }
   .radio-opt.active { border-color: var(--cyan); background: #1a2f50; }
-  .radio-opt input { accent-color: var(--cyan); }
+  .radio-opt input { accent-color: var(--cyan); flex-shrink: 0; }
+  .radio-opt span { flex: 1; }
 
   .waiting-pulse {
     animation: pulse 2s ease-in-out infinite;
@@ -630,6 +631,7 @@ window._applyShock = async function(type) {
   }
 
   updates["trades"] = {};
+  updates["pending"] = {};
   updates["phase"] = "trade";
   updates["round"] = (state.round || 1) + 1;
 
@@ -693,9 +695,25 @@ function renderStudentUI(playerId) {
         <div style="font-size:13px;color:var(--muted);margin-top:8px;">Valuasimu sudah ditetapkan. Jangan kasih tahu orang lain!</div>
       </div>`;
   } else if (state.phase === "trade" && !myTrade) {
+    // Check if I have a pending submission
+    let myPendingInfo = "";
+    if (state.pending) {
+      for (const [key, val] of Object.entries(state.pending)) {
+        if (val[playerId]) {
+          const p = val[playerId];
+          myPendingInfo = `
+            <div class="msg msg-warn mb-12">
+              ⏳ Kamu sudah submit: partner <strong>${p.partnerId}</strong>, harga <strong>${fmt(p.price)}</strong>. Menunggu ${p.partnerId} input harga yang sama...
+            </div>`;
+          break;
+        }
+      }
+    }
+
     phaseUI = `
       <h3 style="color:var(--yellow);font-size:16px;margin-bottom:12px;">🤝 Buat Transaksi</h3>
-      <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Nego dengan mahasiswa lain di kelas. Kalau sudah deal, masukkan di sini.</p>
+      <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Nego dengan mahasiswa lain di kelas. Kedua pihak harus input partner ID dan harga yang <strong style="color:var(--yellow);">SAMA PERSIS</strong>.</p>
+      ${myPendingInfo}
       <div class="setup-field">
         <label>Partner ID (contoh: ${isBuyer ? "S05" : "B12"})</label>
         <input id="partner-input" placeholder="${isBuyer ? "S01" : "B01"}" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;">
@@ -784,8 +802,9 @@ window._submitTrade = async function(playerId) {
   const priceRaw = parseInt(document.getElementById("price-input")?.value);
   const msgEl = document.getElementById("trade-msg");
 
-  const showMsg = (text, ok) => {
-    if (msgEl) msgEl.innerHTML = `<div class="msg ${ok ? "msg-ok" : "msg-err"} mt-12">${text}</div>`;
+  const showMsg = (text, ok, warn) => {
+    const cls = ok ? "msg-ok" : warn ? "msg-warn" : "msg-err";
+    if (msgEl) msgEl.innerHTML = `<div class="msg ${cls} mt-12">${text}</div>`;
   };
 
   if (!partnerRaw || !priceRaw) { showMsg("❌ Isi partner ID dan harga", false); return; }
@@ -814,8 +833,6 @@ window._submitTrade = async function(playerId) {
   // Validate price against valuations
   if (isBuyer && priceRaw > me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} melebihi WTP kamu (${fmt(me.valuation)})`, false); return; }
   if (!isBuyer && priceRaw < me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} di bawah WTA kamu (${fmt(me.valuation)})`, false); return; }
-  if (isBuyer && priceRaw < partner.valuation) { showMsg(`❌ Seller tidak mau jual di harga itu`, false); return; }
-  if (!isBuyer && priceRaw > partner.valuation) { showMsg(`❌ Buyer tidak mau bayar segitu`, false); return; }
 
   // Check not already traded
   const existingTrades = state.trades ? Object.values(state.trades) : [];
@@ -826,16 +843,52 @@ window._submitTrade = async function(playerId) {
     showMsg("❌ Partner sudah bertransaksi", false); return;
   }
 
-  // Submit
+  // === DOUBLE CONFIRMATION SYSTEM ===
   const buyerId = isBuyer ? playerId : partnerRaw;
   const sellerId = isBuyer ? partnerRaw : playerId;
-  const tradeKey = `${buyerId}_${sellerId}`;
+  const pendingKey = `${buyerId}_${sellerId}`;
 
-  await update(ref(db, `market/trades/${tradeKey}`), {
+  // Save my submission as pending
+  await update(ref(db, `market/pending/${pendingKey}/${playerId}`), {
+    partnerId: partnerRaw,
+    price: priceRaw,
+    time: Date.now()
+  });
+
+  // Check if partner already submitted
+  const pendingSnap = await get(ref(db, `market/pending/${pendingKey}/${partnerRaw}`));
+  const partnerPending = pendingSnap.val();
+
+  if (!partnerPending) {
+    // Partner belum submit
+    showMsg(`⏳ Menunggu ${partnerRaw} konfirmasi. Kamu submit harga ${fmt(priceRaw)}. Partner harus input harga yang SAMA.`, false, true);
+    return;
+  }
+
+  // Partner sudah submit — cek harga sama
+  if (partnerPending.price !== priceRaw) {
+    showMsg(`❌ Harga tidak cocok! Kamu: ${fmt(priceRaw)}, ${partnerRaw}: ${fmt(partnerPending.price)}. Nego ulang dan pastikan harga SAMA persis.`, false);
+    // Hapus pending saya supaya bisa re-submit
+    await set(ref(db, `market/pending/${pendingKey}/${playerId}`), null);
+    return;
+  }
+
+  // Partner ID cross-check
+  if (partnerPending.partnerId !== playerId) {
+    showMsg(`❌ ${partnerRaw} tidak memilih kamu sebagai partner.`, false);
+    await set(ref(db, `market/pending/${pendingKey}/${playerId}`), null);
+    return;
+  }
+
+  // === MATCH! Harga sama, partner sama — finalize trade ===
+  await update(ref(db, `market/trades/${pendingKey}`), {
     buyerId, sellerId, price: priceRaw, time: Date.now()
   });
 
-  showMsg("✅ Transaksi berhasil!", true);
+  // Clean up pending
+  await set(ref(db, `market/pending/${pendingKey}`), null);
+
+  showMsg("✅ Transaksi berhasil! Kedua pihak setuju.", true);
 };
 
 // ─── START ───
