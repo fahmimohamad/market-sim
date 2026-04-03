@@ -270,7 +270,7 @@ function showRoleSelect() {
     if (statusEl && marketState && marketState.phase && marketState.phase !== "idle") {
       statusEl.style.display = "block";
       const joined = countJoined(marketState);
-      statusText.textContent = `🟢 Pasar aktif: ${marketState.good || "?"} — ${joined}/40 peserta`;
+      statusText.textContent = `🟢 Pasar aktif: ${marketState.good || "?"} — ${joined}/${(marketState.numBuyers||0)+(marketState.numSellers||0)} peserta`;
     }
   });
 }
@@ -449,11 +449,11 @@ function renderTeacherUI() {
 
       <div class="grid-2 mb-12">
         <div class="card text-center">
-          <div class="stat-num" style="color:var(--cyan);">${joinedB}/20</div>
+          <div class="stat-num" style="color:var(--cyan);">${joinedB}/${state.numBuyers || "?"}</div>
           <div class="stat-label">Buyers joined</div>
         </div>
         <div class="card text-center">
-          <div class="stat-num" style="color:var(--red);">${joinedS}/20</div>
+          <div class="stat-num" style="color:var(--red);">${joinedS}/${state.numSellers || "?"}</div>
           <div class="stat-label">Sellers joined</div>
         </div>
       </div>
@@ -527,7 +527,7 @@ function renderSetupScreen() {
   document.getElementById("app").innerHTML = `
     <div class="container" style="padding-top:40px;">
       <h2 style="color:var(--yellow);margin-bottom:8px;">⚡ Setup Pasar Baru</h2>
-      <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Pilih skenario komoditas.</p>
+      <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Pilih skenario dan jumlah peserta.</p>
 
       <div class="radio-group" id="scenario-group">
         ${Object.entries(SCENARIOS).map(([k, v], i) => `
@@ -536,6 +536,12 @@ function renderSetupScreen() {
             <span style="font-size:14px;">${v.label}</span>
           </label>
         `).join("")}
+      </div>
+
+      <div class="card" style="margin-bottom:16px;">
+        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Jumlah mahasiswa di kelas</div>
+        <input id="num-students" type="number" value="42" min="4" max="100" placeholder="42" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
+        <div style="color:var(--muted);font-size:11px;margin-top:6px;">Otomatis dibagi 2: setengah jadi Buyer, setengah Seller. Kalau ganjil, Buyer dapat 1 lebih.</div>
       </div>
 
       <button class="btn btn-cyan" onclick="window._createMarket()">Buat Pasar →</button>
@@ -554,13 +560,16 @@ window._selectScenario = function(key, el) {
 
 window._createMarket = async function() {
   const sc = SCENARIOS[selectedScenario];
+  const total = parseInt(document.getElementById("num-students")?.value) || 42;
+  const numSellers = Math.floor(total / 2);
+  const numBuyers = total - numSellers;
   const players = {};
 
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= numBuyers; i++) {
     const bid = `B${String(i).padStart(2, "0")}`;
     players[bid] = { id: bid, role: "buyer", valuation: rng(sc.buyerMin, sc.buyerMax), name: "", joined: false };
   }
-  for (let i = 1; i <= 20; i++) {
+  for (let i = 1; i <= numSellers; i++) {
     const sid = `S${String(i).padStart(2, "0")}`;
     players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false };
   }
@@ -570,6 +579,8 @@ window._createMarket = async function() {
     good: sc.good,
     unit: sc.unit,
     round: 1,
+    numBuyers: numBuyers,
+    numSellers: numSellers,
     players: players,
     trades: {},
     priceCeiling: null,
@@ -642,7 +653,7 @@ function renderStudentUI(playerId) {
       <div class="container text-center" style="padding-top:80px;">
         <div style="font-size:48px;margin-bottom:16px;">🚫</div>
         <h2 style="color:var(--red);font-size:18px;margin-bottom:8px;">ID "${playerId}" tidak ditemukan</h2>
-        <p style="color:var(--label);font-size:14px;margin-bottom:24px;">Pastikan dosen sudah membuat pasar dan ID kamu benar (B01–B20 atau S01–S20).</p>
+        <p style="color:var(--label);font-size:14px;margin-bottom:24px;">Pastikan dosen sudah membuat pasar dan ID kamu benar (B01–B${String(state.numBuyers||99).padStart(2,"0")} atau S01–S${String(state.numSellers||99).padStart(2,"0")}).</p>
         <button class="btn btn-outline" onclick="window._back()">← Kembali</button>
       </div>`;
     return;
@@ -797,8 +808,8 @@ window._submitTrade = async function(playerId) {
   }
 
   // Validate roles
-  if (isBuyer && partner.role !== "seller") { showMsg("❌ Partner harus seller (S01-S20)", false); return; }
-  if (!isBuyer && partner.role !== "buyer") { showMsg("❌ Partner harus buyer (B01-B20)", false); return; }
+  if (isBuyer && partner.role !== "seller") { showMsg("❌ Partner harus seller (S01–S..)", false); return; }
+  if (!isBuyer && partner.role !== "buyer") { showMsg("❌ Partner harus buyer (B01–B..)", false); return; }
 
   // Validate price against valuations
   if (isBuyer && priceRaw > me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} melebihi WTP kamu (${fmt(me.valuation)})`, false); return; }
