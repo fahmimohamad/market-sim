@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Market Simulator — Supply & Demand</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  :root {
+    --bg: #080c16; --bg2: #0d1526; --bg3: #0a0f1a;
+    --border: #1a2540; --text: #e0e6f0; --muted: #6a7a9a; --label: #8a9aba;
+    --cyan: #4ecdc4; --red: #ff6b6b; --yellow: #ffd93d; --purple: #c084fc;
+    --cyan-bg: #0d2520; --red-bg: #200d0d; --yellow-bg: #2a1f0a; --purple-bg: #1a1f3a;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: linear-gradient(180deg, var(--bg) 0%, #0a1020 100%);
+    color: var(--text); min-height: 100vh; min-height: 100dvh;
+  }
+
+  .container { max-width: 540px; margin: 0 auto; padding: 16px; }
+
+  h1, h2, h3 { font-family: 'JetBrains Mono', monospace; }
+
+  .btn {
+    display: block; width: 100%; padding: 14px 24px; border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700; cursor: pointer; font-family: 'Inter', sans-serif;
+    transition: transform 0.1s, opacity 0.2s; text-align: center;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-cyan { background: linear-gradient(135deg, #4ecdc4, #44a8a0); color: var(--bg); }
+  .btn-yellow { background: linear-gradient(135deg, #ffd93d, #f0c020); color: var(--bg); }
+  .btn-purple { background: linear-gradient(135deg, #c084fc, #a060dc); color: #fff; }
+  .btn-red { background: linear-gradient(135deg, #ff6b6b, #e05555); color: #fff; }
+  .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--label); }
+  .btn-sm { padding: 10px 14px; font-size: 13px; border-radius: 8px; }
+
+  input, select {
+    width: 100%; padding: 12px 14px; background: var(--bg3); border: 1.5px solid var(--border);
+    border-radius: 8px; color: var(--text); font-size: 16px; font-family: 'Inter', sans-serif;
+    outline: none; transition: border-color 0.2s;
+  }
+  input:focus, select:focus { border-color: var(--cyan); }
+  input::placeholder { color: var(--muted); }
+
+  .card { background: var(--bg2); border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .badge {
+    display: inline-block; padding: 4px 12px; border-radius: 20px;
+    font-size: 12px; font-weight: 700;
+  }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .text-center { text-align: center; }
+  .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; } .mb-8 { margin-bottom: 8px; } .mb-12 { margin-bottom: 12px; } .mb-16 { margin-bottom: 16px; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .stat-num { font-size: 24px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+  .stat-label { font-size: 11px; color: var(--label); margin-top: 2px; }
+
+  .msg { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
+  .msg-ok { background: var(--cyan-bg); color: var(--cyan); }
+  .msg-err { background: var(--red-bg); color: var(--red); }
+  .msg-warn { background: var(--yellow-bg); color: var(--yellow); border: 1px solid var(--yellow); }
+
+  .trade-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; border-radius: 4px; font-size: 12px;
+  }
+  .trade-row:nth-child(even) { background: var(--bg2); }
+
+  .shock-btn {
+    flex: 1; min-width: 0; padding: 10px 8px; border-radius: 8px;
+    font-size: 11px; font-weight: 600; cursor: pointer; text-align: center; border: 1.5px solid;
+    background: transparent; transition: opacity 0.2s;
+  }
+  .shock-btn:active { opacity: 0.7; }
+
+  .radio-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .radio-opt {
+    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    background: var(--bg2); border-radius: 8px; border: 2px solid var(--border);
+    cursor: pointer; transition: border-color 0.2s;
+  }
+  .radio-opt.active { border-color: var(--cyan); background: #1a2f50; }
+  .radio-opt input { accent-color: var(--cyan); }
+
+  .waiting-pulse {
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .chip {
+    display: inline-block; padding: 3px 8px; border-radius: 4px;
+    font-size: 12px; font-family: 'JetBrains Mono', monospace;
+    background: var(--purple-bg); color: var(--purple); margin: 2px;
+  }
+
+  .hidden { display: none; }
+
+  /* SVG chart */
+  .chart-wrap { margin: 12px 0; }
+  .chart-wrap svg { width: 100%; border-radius: 12px; }
+
+  /* Setup form custom inputs */
+  .setup-field { margin-bottom: 10px; }
+  .setup-field label { display: block; color: var(--label); font-size: 12px; margin-bottom: 4px; }
+  .setup-field input { font-family: 'JetBrains Mono', monospace; }
+
+  /* Scrollable trade log */
+  .trade-log { max-height: 200px; overflow-y: auto; margin-top: 8px; }
+
+  .loading-screen {
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--cyan); font-family: 'JetBrains Mono', monospace;
+  }
+
+  .config-notice {
+    background: var(--red-bg); border: 2px solid var(--red); border-radius: 12px;
+    padding: 20px; margin: 40px 16px; text-align: center;
+  }
+  .config-notice h2 { color: var(--red); font-size: 18px; margin-bottom: 12px; }
+  .config-notice p { color: var(--label); font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
+  .config-notice code {
+    display: block; background: var(--bg3); padding: 12px; border-radius: 6px;
+    font-size: 12px; color: var(--yellow); margin: 12px 0; text-align: left;
+    word-break: break-all; font-family: 'JetBrains Mono', monospace;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+  INSTRUKSI SETUP FIREBASE (5 menit):
+  
+  1. Buka https://console.firebase.google.com
+  2. Klik "Create a project" → beri nama (misal: "market-sim") → Continue
+  3. Disable Google Analytics (tidak perlu) → Create Project
+  4. Di sidebar kiri, klik "Build" → "Realtime Database"
+  5. Klik "Create Database" → pilih region → Start in TEST MODE → Enable
+  6. Di sidebar kiri, klik gear icon → "Project settings"
+  7. Scroll ke "Your apps" → klik ikon Web (</>) 
+  8. Beri nama (misal: "market") → Register app
+  9. Copy config object → paste di bawah (ganti FIREBASE_CONFIG)
+  
+  10. PENTING: Set security rules di Realtime Database → Rules:
+      {
+        "rules": {
+          ".read": true,
+          ".write": true
+        }
+      }
+      (Ini untuk testing. Setelah selesai, bisa dimatikan.)
+
+  11. Host file ini di GitHub Pages atau buka langsung di browser.
+      Untuk GitHub Pages:
+      - Buat repo baru di github.com
+      - Upload file ini sebagai index.html
+      - Settings → Pages → Source: main branch → Save
+      - Tunggu 1-2 menit, link akan muncul
+  
+  12. Share link ke mahasiswa. Selesai!
+============================================================ -->
+
+<script type="module">
+
+// ╔══════════════════════════════════════════════════════════╗
+// ║  GANTI CONFIG INI DENGAN FIREBASE CONFIG KAMU           ║
+// ╚══════════════════════════════════════════════════════════╝
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAIOpUIeuSAifPPJtSQ9DqhmljdqZuyzFU",
+  authDomain: "market-sim-unpad.firebaseapp.com",
+  databaseURL: "https://market-sim-unpad-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "market-sim-unpad",
+  storageBucket: "market-sim-unpad.firebasestorage.app",
+  messagingSenderId: "930140198622",
+  appId: "1:930140198622:web:948da76e024ffa6b17944f"
+};
+
+// ─── Firebase imports ───
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
+import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-database.js";
+
+// ─── Check config ───
+const isConfigured = FIREBASE_CONFIG.apiKey !== "PASTE_YOUR_API_KEY";
+
+// ─── Globals ───
+let db = null;
+let currentRole = null; // "teacher" | "B01" | "S14" etc
+let marketState = null;
+let unsubscribe = null;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const fmt = (v) => new Intl.NumberFormat("id-ID").format(v);
+
+// ─── Scenarios ───
+const SCENARIOS = {
+  minyak: { label: "Minyak Goreng (1 liter)", buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000, unit: "Rp", good: "Minyak Goreng" },
+  beras: { label: "Beras (1 kg)", buyerMin: 8000, buyerMax: 18000, sellerMin: 6000, sellerMax: 15000, unit: "Rp", good: "Beras" },
+  buku: { label: "Buku Bekas Mikroekonomi", buyerMin: 20000, buyerMax: 80000, sellerMin: 15000, sellerMax: 70000, unit: "Rp", good: "Buku Bekas" },
+  cabai: { label: "Cabai Merah (1 kg)", buyerMin: 20000, buyerMax: 60000, sellerMin: 15000, sellerMax: 50000, unit: "Rp", good: "Cabai" },
+};
+
+// ─── Init ───
+function init() {
+  if (!isConfigured) {
+    document.getElementById("app").innerHTML = `
+      <div class="config-notice">
+        <h2>⚠️ Firebase Belum Dikonfigurasi</h2>
+        <p>Buka file HTML ini dengan text editor, lalu ganti <strong>FIREBASE_CONFIG</strong> dengan config dari Firebase Console kamu.</p>
+        <code>const FIREBASE_CONFIG = {<br>&nbsp;&nbsp;apiKey: "AIza...",<br>&nbsp;&nbsp;authDomain: "your-project.firebaseapp.com",<br>&nbsp;&nbsp;databaseURL: "https://your-project-default-rtdb...",<br>&nbsp;&nbsp;...<br>};</code>
+        <p>Lihat instruksi lengkap di dalam komentar HTML file ini.</p>
+      </div>`;
+    return;
+  }
+
+  const app = initializeApp(FIREBASE_CONFIG);
+  db = getDatabase(app);
+  showRoleSelect();
+}
+
+// ─── ROLE SELECT SCREEN ───
+function showRoleSelect() {
+  const hasMarket = marketState && marketState.phase && marketState.phase !== "idle";
+  
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
+      <div style="width:100%;max-width:400px;">
+        <div class="text-center mb-16">
+          <div style="font-size:48px;margin-bottom:8px;">📊</div>
+          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
+          <p style="color:var(--muted);font-size:14px;">Supply & Demand — Interactive</p>
+        </div>
+
+        <button class="btn btn-yellow mb-12" onclick="window._selectRole('teacher')">
+          👨‍🏫 Saya Dosen
+        </button>
+
+        <div class="text-center" style="color:var(--border);font-size:13px;margin:12px 0;">— atau —</div>
+
+        <div style="display:flex;gap:8px;">
+          <input id="role-id-input" placeholder="ID kamu (contoh: B05, S12)" 
+            style="flex:1;text-transform:uppercase;font-family:'JetBrains Mono',monospace;" 
+            onkeydown="if(event.key==='Enter')window._selectRole(this.value.toUpperCase().trim())">
+          <button class="btn btn-cyan" style="width:auto;padding:12px 20px;" 
+            onclick="window._selectRole(document.getElementById('role-id-input').value.toUpperCase().trim())">
+            Masuk
+          </button>
+        </div>
+
+        <div id="market-status" class="mt-16 text-center" style="display:none;">
+          <div class="card" style="padding:10px;">
+            <span style="color:var(--cyan);font-size:13px;" id="status-text"></span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // Listen for market state to show status
+  if (unsubscribe) unsubscribe();
+  unsubscribe = onValue(ref(db, "market"), (snap) => {
+    marketState = snap.val();
+    const statusEl = document.getElementById("market-status");
+    const statusText = document.getElementById("status-text");
+    if (statusEl && marketState && marketState.phase && marketState.phase !== "idle") {
+      statusEl.style.display = "block";
+      const joined = countJoined(marketState);
+      statusText.textContent = `🟢 Pasar aktif: ${marketState.good || "?"} — ${joined}/40 peserta`;
+    }
+  });
+}
+
+window._selectRole = function(role) {
+  if (!role) return;
+  currentRole = role;
+  if (role === "teacher") {
+    showTeacher();
+  } else {
+    showStudent(role);
+  }
+};
+
+// ─── HELPERS ───
+function countJoined(state) {
+  if (!state || !state.players) return 0;
+  return Object.values(state.players).filter(p => p.joined).length;
+}
+
+function rng(min, max) { return Math.round(min + Math.random() * (max - min)); }
+
+function computeEquilibrium(state) {
+  if (!state || !state.players) return { price: 0, quantity: 0 };
+  const players = Object.values(state.players);
+  const buyers = players.filter(p => p.role === "buyer").sort((a, b) => b.valuation - a.valuation);
+  const sellers = players.filter(p => p.role === "seller").sort((a, b) => a.valuation - b.valuation);
+
+  let eqQ = 0;
+  for (let i = 0; i < Math.min(buyers.length, sellers.length); i++) {
+    if (buyers[i].valuation >= sellers[i].valuation) eqQ = i + 1;
+    else break;
+  }
+  if (eqQ === 0) return { price: 0, quantity: 0, buyers, sellers };
+  const p = Math.round((sellers[eqQ - 1].valuation + buyers[eqQ - 1].valuation) / 2);
+  return { price: p, quantity: eqQ, buyers, sellers };
+}
+
+function getTradesArray(state) {
+  if (!state || !state.trades) return [];
+  return Object.values(state.trades).sort((a, b) => a.time - b.time);
+}
+
+// ─── SVG CHART ───
+function renderChart(state) {
+  if (!state || !state.players) return '<div class="card text-center" style="color:var(--muted);padding:30px;">Belum ada data</div>';
+
+  const players = Object.values(state.players);
+  const buyers = players.filter(p => p.role === "buyer").sort((a, b) => b.valuation - a.valuation);
+  const sellers = players.filter(p => p.role === "seller").sort((a, b) => a.valuation - b.valuation);
+  const trades = getTradesArray(state);
+  const eq = computeEquilibrium(state);
+
+  const W = 560, H = 340;
+  const pad = { top: 30, right: 30, bottom: 50, left: 70 };
+  const w = W - pad.left - pad.right;
+  const h = H - pad.top - pad.bottom;
+
+  const allVals = players.map(p => p.valuation);
+  if (allVals.length === 0) return '';
+  const maxP = Math.max(...allVals) * 1.15;
+  const minP = Math.min(...allVals) * 0.75;
+  const maxQ = Math.max(buyers.length, sellers.length) + 2;
+
+  const xS = (q) => pad.left + (q / maxQ) * w;
+  const yS = (p) => pad.top + h - ((p - minP) / (maxP - minP)) * h;
+
+  // Demand path
+  const dPath = buyers.map((b, i) => `${i === 0 ? "M" : "L"}${xS(i + 1).toFixed(1)},${yS(b.valuation).toFixed(1)}`).join(" ");
+  // Supply path
+  const sPath = sellers.map((s, i) => `${i === 0 ? "M" : "L"}${xS(i + 1).toFixed(1)},${yS(s.valuation).toFixed(1)}`).join(" ");
+
+  // Y ticks
+  const numT = 5;
+  const step = (maxP - minP) / numT;
+  const yTicks = Array.from({ length: numT + 1 }, (_, i) => Math.round(minP + i * step));
+
+  // X ticks
+  const xTicks = [];
+  for (let i = 1; i <= maxQ; i++) { if (i % 5 === 0 || i === 1) xTicks.push(i); }
+
+  // Trades dots
+  const tradeDots = trades.map((t, i) =>
+    `<circle cx="${xS(i + 1).toFixed(1)}" cy="${yS(t.price).toFixed(1)}" r="5" fill="var(--purple)" stroke="var(--bg3)" stroke-width="1.5" opacity="0.9"><animate attributeName="r" from="9" to="5" dur="0.4s" fill="freeze"/></circle>`
+  ).join("");
+
+  // Equilibrium lines
+  let eqSvg = "";
+  if (eq.quantity > 0) {
+    eqSvg = `
+      <line x1="${xS(eq.quantity)}" x2="${xS(eq.quantity)}" y1="${yS(eq.price)}" y2="${pad.top + h}" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <line x1="${pad.left}" x2="${xS(eq.quantity)}" y1="${yS(eq.price)}" y2="${yS(eq.price)}" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="6,4"/>
+      <circle cx="${xS(eq.quantity)}" cy="${yS(eq.price)}" r="6" fill="var(--yellow)" stroke="var(--bg3)" stroke-width="2"/>
+      <text x="${xS(eq.quantity) + 10}" y="${yS(eq.price) - 8}" fill="var(--yellow)" font-size="11" font-weight="700" font-family="JetBrains Mono,monospace">E: ${fmt(eq.price)} × ${eq.quantity}</text>
+    `;
+  }
+
+  // Price ceiling line
+  let ceilingSvg = "";
+  if (state.priceCeiling) {
+    const cy = yS(state.priceCeiling);
+    ceilingSvg = `
+      <line x1="${pad.left}" x2="${W - pad.right}" y1="${cy}" y2="${cy}" stroke="var(--red)" stroke-width="2" stroke-dasharray="8,4"/>
+      <text x="${W - pad.right - 4}" y="${cy - 6}" fill="var(--red)" font-size="10" font-weight="700" text-anchor="end" font-family="JetBrains Mono,monospace">HET ${fmt(state.priceCeiling)}</text>
+    `;
+  }
+
+  return `<div class="chart-wrap">
+    <svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="background:var(--bg3);border-radius:12px;">
+      ${yTicks.map(t => `<line x1="${pad.left}" x2="${W - pad.right}" y1="${yS(t)}" y2="${yS(t)}" stroke="var(--border)" stroke-width="0.5"/>`).join("")}
+      <line x1="${pad.left}" x2="${pad.left}" y1="${pad.top}" y2="${pad.top + h}" stroke="#3a4a6a" stroke-width="1.5"/>
+      <line x1="${pad.left}" x2="${pad.left + w}" y1="${pad.top + h}" y2="${pad.top + h}" stroke="#3a4a6a" stroke-width="1.5"/>
+      ${yTicks.map(t => `<text x="${pad.left - 8}" y="${yS(t) + 4}" text-anchor="end" fill="var(--label)" font-size="10" font-family="JetBrains Mono,monospace">${fmt(t)}</text>`).join("")}
+      ${xTicks.map(t => `<text x="${xS(t)}" y="${pad.top + h + 18}" text-anchor="middle" fill="var(--label)" font-size="10" font-family="JetBrains Mono,monospace">${t}</text>`).join("")}
+      <text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="600">Quantity</text>
+      <text x="14" y="${H / 2}" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="600" transform="rotate(-90,14,${H / 2})">Price (${state.unit || "Rp"})</text>
+      <path d="${dPath}" fill="none" stroke="var(--cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="${xS(buyers.length) + 6}" y="${yS(buyers[buyers.length - 1]?.valuation || 0)}" fill="var(--cyan)" font-size="12" font-weight="700">D</text>
+      <path d="${sPath}" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="${xS(sellers.length) + 6}" y="${yS(sellers[sellers.length - 1]?.valuation || 0)}" fill="var(--red)" font-size="12" font-weight="700">S</text>
+      ${eqSvg}
+      ${ceilingSvg}
+      ${tradeDots}
+      <rect x="${W - 165}" y="6" width="155" height="68" rx="6" fill="var(--bg2)" stroke="var(--border)" stroke-width="0.5"/>
+      <circle cx="${W - 148}" cy="22" r="4" fill="var(--cyan)"/><text x="${W - 138}" y="26" fill="#ccc" font-size="9">Demand (WTP)</text>
+      <circle cx="${W - 148}" cy="38" r="4" fill="var(--red)"/><text x="${W - 138}" y="42" fill="#ccc" font-size="9">Supply (WTA)</text>
+      <circle cx="${W - 148}" cy="54" r="4" fill="var(--yellow)"/><text x="${W - 138}" y="58" fill="#ccc" font-size="9">Equilibrium</text>
+      <circle cx="${W - 148}" cy="70" r="4" fill="var(--purple)"/><text x="${W - 138}" y="74" fill="#ccc" font-size="9">Transaksi aktual</text>
+    </svg>
+  </div>`;
+}
+
+// ─── TEACHER VIEW ───
+function showTeacher() {
+  if (unsubscribe) unsubscribe();
+
+  // Listen to market state
+  unsubscribe = onValue(ref(db, "market"), (snap) => {
+    marketState = snap.val();
+    renderTeacherUI();
+  });
+}
+
+function renderTeacherUI() {
+  const state = marketState;
+
+  if (!state || !state.phase || state.phase === "idle") {
+    renderSetupScreen();
+    return;
+  }
+
+  const players = state.players ? Object.values(state.players) : [];
+  const joinedB = players.filter(p => p.role === "buyer" && p.joined).length;
+  const joinedS = players.filter(p => p.role === "seller" && p.joined).length;
+  const trades = getTradesArray(state);
+  const eq = computeEquilibrium(state);
+
+  let tradeAvg = 0;
+  if (trades.length > 0) {
+    tradeAvg = Math.round(trades.reduce((s, t) => s + t.price, 0) / trades.length);
+  }
+
+  document.getElementById("app").innerHTML = `
+    <div class="container">
+      <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-12">
+        <div>
+          <h2 style="color:var(--yellow);font-size:18px;">📊 ${state.good || "?"} — Round ${state.round || 1}</h2>
+          <span class="badge mt-4" style="margin-top:6px;background:${state.phase === "join" ? "var(--cyan-bg)" : state.phase === "trade" ? "var(--yellow-bg)" : "var(--purple-bg)"};color:${state.phase === "join" ? "var(--cyan)" : state.phase === "trade" ? "var(--yellow)" : "var(--purple)"};">
+            ${state.phase === "join" ? "⏳ Menunggu peserta" : state.phase === "trade" ? "🔥 Trading aktif" : "📊 Hasil"}
+          </span>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="window._resetMarket()" style="width:auto;padding:6px 14px;font-size:12px;border-color:var(--red);color:var(--red);">Reset</button>
+      </div>
+
+      ${state.shockLabel ? `<div class="msg msg-warn mb-12">${state.shockLabel}</div>` : ""}
+
+      <div class="grid-2 mb-12">
+        <div class="card text-center">
+          <div class="stat-num" style="color:var(--cyan);">${joinedB}/20</div>
+          <div class="stat-label">Buyers joined</div>
+        </div>
+        <div class="card text-center">
+          <div class="stat-num" style="color:var(--red);">${joinedS}/20</div>
+          <div class="stat-label">Sellers joined</div>
+        </div>
+      </div>
+
+      ${renderChart(state)}
+
+      ${eq && eq.quantity > 0 ? `
+        <div class="grid-3 mt-12">
+          <div class="card text-center">
+            <div class="stat-num" style="color:var(--yellow);">${fmt(eq.price)}</div>
+            <div class="stat-label">P* (Teori)</div>
+          </div>
+          <div class="card text-center">
+            <div class="stat-num" style="color:var(--yellow);">${eq.quantity}</div>
+            <div class="stat-label">Q* (Teori)</div>
+          </div>
+          <div class="card text-center">
+            <div class="stat-num" style="color:var(--purple);">${trades.length}</div>
+            <div class="stat-label">Transaksi</div>
+          </div>
+        </div>
+      ` : ""}
+
+      ${trades.length > 0 ? `
+        <div class="card mt-12">
+          <div style="color:var(--label);font-size:12px;" class="mb-8">Harga Transaksi Aktual</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            ${trades.map(t => `<span class="chip">${fmt(t.price)}</span>`).join("")}
+          </div>
+          <div style="margin-top:8px;color:var(--label);font-size:12px;">
+            Rata-rata: <strong style="color:var(--purple);">${fmt(tradeAvg)}</strong>
+            ${eq ? ` vs P* teori: <strong style="color:var(--yellow);">${fmt(eq.price)}</strong>` : ""}
+          </div>
+        </div>
+      ` : ""}
+
+      ${state.priceCeiling ? `<div class="msg msg-err mt-12">⛔ HET aktif: transaksi di atas ${fmt(state.priceCeiling)} tidak diperbolehkan</div>` : ""}
+
+      <div class="mt-16" style="display:flex;flex-direction:column;gap:8px;">
+        ${state.phase === "join" ? `<button class="btn btn-yellow" onclick="window._openTrading()">🔔 Buka Trading</button>` : ""}
+        ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup & Lihat Hasil</button>` : ""}
+        ${state.phase === "results" || state.phase === "trade" ? `
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="shock-btn" style="border-color:var(--cyan);color:var(--cyan);" onclick="window._applyShock('demand_up')">📈 Demand +30%</button>
+            <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_down')">📉 Supply Cost +30%</button>
+            <button class="shock-btn" style="border-color:var(--yellow);color:var(--yellow);" onclick="window._applyShock('price_ceiling')">⛔ Pasang HET</button>
+          </div>
+        ` : ""}
+      </div>
+
+      ${trades.length > 0 ? `
+        <div class="mt-16">
+          <div style="color:var(--label);font-size:12px;" class="mb-8">📜 Log Transaksi</div>
+          <div class="trade-log">
+            ${trades.slice().reverse().map((t, i) => `
+              <div class="trade-row">
+                <span style="color:var(--cyan);">${t.buyerId}</span>
+                <span style="color:var(--purple);" class="mono">${fmt(t.price)}</span>
+                <span style="color:var(--red);">${t.sellerId}</span>
+              </div>
+            `).join("")}
+          </div>
+        </div>
+      ` : ""}
+
+      <div style="height:40px;"></div>
+    </div>`;
+}
+
+function renderSetupScreen() {
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="padding-top:40px;">
+      <h2 style="color:var(--yellow);margin-bottom:8px;">⚡ Setup Pasar Baru</h2>
+      <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Pilih skenario komoditas.</p>
+
+      <div class="radio-group" id="scenario-group">
+        ${Object.entries(SCENARIOS).map(([k, v], i) => `
+          <label class="radio-opt ${i === 0 ? "active" : ""}" onclick="window._selectScenario('${k}', this)">
+            <input type="radio" name="scenario" value="${k}" ${i === 0 ? "checked" : ""}>
+            <span style="font-size:14px;">${v.label}</span>
+          </label>
+        `).join("")}
+      </div>
+
+      <button class="btn btn-cyan" onclick="window._createMarket()">Buat Pasar →</button>
+
+      <div style="height:40px;"></div>
+    </div>`;
+}
+
+let selectedScenario = "minyak";
+
+window._selectScenario = function(key, el) {
+  selectedScenario = key;
+  document.querySelectorAll(".radio-opt").forEach(e => e.classList.remove("active"));
+  el.classList.add("active");
+};
+
+window._createMarket = async function() {
+  const sc = SCENARIOS[selectedScenario];
+  const players = {};
+
+  for (let i = 1; i <= 20; i++) {
+    const bid = `B${String(i).padStart(2, "0")}`;
+    players[bid] = { id: bid, role: "buyer", valuation: rng(sc.buyerMin, sc.buyerMax), name: "", joined: false };
+  }
+  for (let i = 1; i <= 20; i++) {
+    const sid = `S${String(i).padStart(2, "0")}`;
+    players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false };
+  }
+
+  await set(ref(db, "market"), {
+    phase: "join",
+    good: sc.good,
+    unit: sc.unit,
+    round: 1,
+    players: players,
+    trades: {},
+    priceCeiling: null,
+    shockLabel: null,
+    createdAt: Date.now(),
+  });
+};
+
+window._openTrading = async function() {
+  await update(ref(db, "market"), { phase: "trade" });
+};
+
+window._closeTrading = async function() {
+  await update(ref(db, "market"), { phase: "results" });
+};
+
+window._resetMarket = async function() {
+  if (!confirm("Reset pasar? Semua data akan hilang.")) return;
+  await set(ref(db, "market"), { phase: "idle" });
+};
+
+window._applyShock = async function(type) {
+  const snap = await get(ref(db, "market"));
+  const state = snap.val();
+  if (!state || !state.players) return;
+
+  const updates = {};
+
+  if (type === "demand_up") {
+    Object.entries(state.players).forEach(([id, p]) => {
+      if (p.role === "buyer") {
+        updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
+      }
+    });
+    updates["shockLabel"] = "🔺 Demand Shock: WTP naik 30%";
+  } else if (type === "supply_down") {
+    Object.entries(state.players).forEach(([id, p]) => {
+      if (p.role === "seller") {
+        updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
+      }
+    });
+    updates["shockLabel"] = "🔺 Supply Shock: WTA naik 30% (biaya produksi naik)";
+  } else if (type === "price_ceiling") {
+    const eq = computeEquilibrium(state);
+    updates["priceCeiling"] = Math.round(eq.price * 0.7);
+    updates["shockLabel"] = `⛔ Price Ceiling: HET ${fmt(Math.round(eq.price * 0.7))}`;
+  }
+
+  updates["trades"] = {};
+  updates["phase"] = "trade";
+  updates["round"] = (state.round || 1) + 1;
+
+  await update(ref(db, "market"), updates);
+};
+
+// ─── STUDENT VIEW ───
+function showStudent(playerId) {
+  if (unsubscribe) unsubscribe();
+
+  unsubscribe = onValue(ref(db, "market"), (snap) => {
+    marketState = snap.val();
+    renderStudentUI(playerId);
+  });
+}
+
+function renderStudentUI(playerId) {
+  const state = marketState;
+  if (!state || !state.players || !state.players[playerId]) {
+    document.getElementById("app").innerHTML = `
+      <div class="container text-center" style="padding-top:80px;">
+        <div style="font-size:48px;margin-bottom:16px;">🚫</div>
+        <h2 style="color:var(--red);font-size:18px;margin-bottom:8px;">ID "${playerId}" tidak ditemukan</h2>
+        <p style="color:var(--label);font-size:14px;margin-bottom:24px;">Pastikan dosen sudah membuat pasar dan ID kamu benar (B01–B20 atau S01–S20).</p>
+        <button class="btn btn-outline" onclick="window._back()">← Kembali</button>
+      </div>`;
+    return;
+  }
+
+  const me = state.players[playerId];
+  const isBuyer = me.role === "buyer";
+  const trades = getTradesArray(state);
+  const myTrade = trades.find(t => t.buyerId === playerId || t.sellerId === playerId);
+
+  // Not joined yet
+  if (!me.joined) {
+    document.getElementById("app").innerHTML = `
+      <div class="container text-center" style="padding-top:60px;">
+        <span class="badge mb-16" style="background:${isBuyer ? "var(--cyan-bg)" : "var(--red-bg)"};color:${isBuyer ? "var(--cyan)" : "var(--red)"};">
+          ${playerId} — ${isBuyer ? "🛒 BUYER" : "🏪 SELLER"}
+        </span>
+        <h2 style="margin-bottom:8px;">Masuk ke Pasar</h2>
+        <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Masukkan nama kamu untuk bergabung.</p>
+        <input id="name-input" placeholder="Nama kamu" class="mb-12"
+          onkeydown="if(event.key==='Enter')window._joinGame('${playerId}')">
+        <button class="btn ${isBuyer ? "btn-cyan" : "btn-red"}" onclick="window._joinGame('${playerId}')">Gabung</button>
+      </div>`;
+    return;
+  }
+
+  // Joined — show player card + trading UI
+  const surplus = myTrade ? (isBuyer ? me.valuation - myTrade.price : myTrade.price - me.valuation) : null;
+
+  let phaseUI = "";
+
+  if (state.phase === "join") {
+    phaseUI = `
+      <div class="text-center" style="padding:30px;">
+        <div style="font-size:40px;" class="waiting-pulse mb-8">⏳</div>
+        <div style="font-size:16px;">Menunggu dosen membuka trading...</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px;">Valuasimu sudah ditetapkan. Jangan kasih tahu orang lain!</div>
+      </div>`;
+  } else if (state.phase === "trade" && !myTrade) {
+    phaseUI = `
+      <h3 style="color:var(--yellow);font-size:16px;margin-bottom:12px;">🤝 Buat Transaksi</h3>
+      <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Nego dengan mahasiswa lain di kelas. Kalau sudah deal, masukkan di sini.</p>
+      <div class="setup-field">
+        <label>Partner ID (contoh: ${isBuyer ? "S05" : "B12"})</label>
+        <input id="partner-input" placeholder="${isBuyer ? "S01" : "B01"}" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;">
+      </div>
+      <div class="setup-field">
+        <label>Harga kesepakatan (Rp)</label>
+        <input id="price-input" type="number" placeholder="15000" style="color:var(--yellow);font-size:18px;font-family:'JetBrains Mono',monospace;">
+      </div>
+      <button class="btn btn-purple mt-12" onclick="window._submitTrade('${playerId}')">✅ Submit Transaksi</button>
+      <div id="trade-msg"></div>`;
+  } else if (myTrade) {
+    phaseUI = `
+      <div class="card text-center">
+        <div style="font-size:36px;margin-bottom:8px;">🎉</div>
+        <div style="font-size:16px;font-weight:600;">Transaksi Selesai!</div>
+        <div class="grid-2 mt-12">
+          <div>
+            <div class="stat-label">Harga Deal</div>
+            <div class="stat-num" style="color:var(--purple);">${fmt(myTrade.price)}</div>
+          </div>
+          <div>
+            <div class="stat-label">Surplus Kamu</div>
+            <div class="stat-num" style="color:${surplus >= 0 ? "var(--cyan)" : "var(--red)"};">${surplus >= 0 ? "+" : ""}${fmt(surplus)}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;color:var(--muted);font-size:12px;">Partner: ${isBuyer ? myTrade.sellerId : myTrade.buyerId}</div>
+      </div>`;
+  }
+
+  if (state.phase === "results") {
+    phaseUI += `
+      <div class="mt-16">
+        <h3 style="color:var(--purple);font-size:16px;margin-bottom:8px;">📊 Hasil Pasar</h3>
+        ${renderChart(state)}
+      </div>`;
+  }
+
+  document.getElementById("app").innerHTML = `
+    <div class="container">
+      <div style="background:${isBuyer ? "linear-gradient(135deg, #0d2520, #0a1a18)" : "linear-gradient(135deg, #200d0d, #1a0a0a)"};border-radius:12px;padding:16px;margin-bottom:16px;border:2px solid ${isBuyer ? "#4ecdc430" : "#ff6b6b30"};">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="color:var(--label);font-size:11px;">${playerId} — ${me.name}</div>
+            <div style="color:${isBuyer ? "var(--cyan)" : "var(--red)"};font-size:22px;font-weight:800;margin-top:4px;">
+              ${isBuyer ? "🛒 BUYER" : "🏪 SELLER"}
+            </div>
+          </div>
+          <div style="text-align:right;">
+            <div style="color:var(--label);font-size:11px;">${isBuyer ? "Max WTP" : "Min WTA"}</div>
+            <div style="color:var(--yellow);font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmt(me.valuation)}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;padding:8px 12px;background:#0a0f1a80;border-radius:6px;font-size:12px;color:var(--label);">
+          ${isBuyer
+            ? `Kamu bersedia bayar MAKSIMAL Rp${fmt(me.valuation)} untuk ${state.good}. Cari seller yang mau jual lebih murah!`
+            : `Kamu bersedia jual MINIMAL Rp${fmt(me.valuation)} untuk ${state.good}. Cari buyer yang mau bayar lebih mahal!`}
+        </div>
+      </div>
+
+      ${state.priceCeiling ? `<div class="msg msg-err mb-12">⛔ HET aktif: harga tidak boleh di atas ${fmt(state.priceCeiling)}</div>` : ""}
+      ${state.shockLabel ? `<div class="msg msg-warn mb-12">${state.shockLabel}</div>` : ""}
+
+      ${phaseUI}
+
+      <div style="height:40px;"></div>
+    </div>`;
+}
+
+window._back = function() {
+  currentRole = null;
+  showRoleSelect();
+};
+
+window._joinGame = async function(playerId) {
+  const nameInput = document.getElementById("name-input");
+  if (!nameInput || !nameInput.value.trim()) return;
+
+  await update(ref(db, `market/players/${playerId}`), {
+    name: nameInput.value.trim(),
+    joined: true,
+  });
+};
+
+window._submitTrade = async function(playerId) {
+  const partnerRaw = document.getElementById("partner-input")?.value?.toUpperCase()?.trim();
+  const priceRaw = parseInt(document.getElementById("price-input")?.value);
+  const msgEl = document.getElementById("trade-msg");
+
+  const showMsg = (text, ok) => {
+    if (msgEl) msgEl.innerHTML = `<div class="msg ${ok ? "msg-ok" : "msg-err"} mt-12">${text}</div>`;
+  };
+
+  if (!partnerRaw || !priceRaw) { showMsg("❌ Isi partner ID dan harga", false); return; }
+
+  // Get fresh state
+  const snap = await get(ref(db, "market"));
+  const state = snap.val();
+  if (!state || !state.players) { showMsg("❌ Market belum aktif", false); return; }
+
+  const me = state.players[playerId];
+  if (!me) { showMsg("❌ Player tidak ditemukan", false); return; }
+
+  const isBuyer = me.role === "buyer";
+  const partner = state.players[partnerRaw];
+  if (!partner) { showMsg(`❌ ID "${partnerRaw}" tidak ditemukan`, false); return; }
+
+  // Check price ceiling
+  if (state.priceCeiling && priceRaw > state.priceCeiling) {
+    showMsg(`⛔ Harga melebihi HET (${fmt(state.priceCeiling)})`, false); return;
+  }
+
+  // Validate roles
+  if (isBuyer && partner.role !== "seller") { showMsg("❌ Partner harus seller (S01-S20)", false); return; }
+  if (!isBuyer && partner.role !== "buyer") { showMsg("❌ Partner harus buyer (B01-B20)", false); return; }
+
+  // Validate price against valuations
+  if (isBuyer && priceRaw > me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} melebihi WTP kamu (${fmt(me.valuation)})`, false); return; }
+  if (!isBuyer && priceRaw < me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} di bawah WTA kamu (${fmt(me.valuation)})`, false); return; }
+  if (isBuyer && priceRaw < partner.valuation) { showMsg(`❌ Seller tidak mau jual di harga itu`, false); return; }
+  if (!isBuyer && priceRaw > partner.valuation) { showMsg(`❌ Buyer tidak mau bayar segitu`, false); return; }
+
+  // Check not already traded
+  const existingTrades = state.trades ? Object.values(state.trades) : [];
+  if (existingTrades.find(t => t.buyerId === playerId || t.sellerId === playerId)) {
+    showMsg("❌ Kamu sudah bertransaksi di round ini", false); return;
+  }
+  if (existingTrades.find(t => t.buyerId === partnerRaw || t.sellerId === partnerRaw)) {
+    showMsg("❌ Partner sudah bertransaksi", false); return;
+  }
+
+  // Submit
+  const buyerId = isBuyer ? playerId : partnerRaw;
+  const sellerId = isBuyer ? partnerRaw : playerId;
+  const tradeKey = `${buyerId}_${sellerId}`;
+
+  await update(ref(db, `market/trades/${tradeKey}`), {
+    buyerId, sellerId, price: priceRaw, time: Date.now()
+  });
+
+  showMsg("✅ Transaksi berhasil!", true);
+};
+
+// ─── START ───
+init();
+
+</script>
+
+<div id="app">
+  <div class="loading-screen">Loading...</div>
+</div>
+
+</body>
+</html>
