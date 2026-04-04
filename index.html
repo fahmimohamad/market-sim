@@ -238,9 +238,21 @@ function showRoleSelect() {
           <p style="color:var(--muted);font-size:14px;">Supply & Demand — Interactive</p>
         </div>
 
-        <button class="btn btn-yellow mb-12" onclick="window._selectRole('teacher')">
+        <button class="btn btn-yellow mb-12" onclick="window._showTeacherLogin()">
           👨‍🏫 Saya Dosen
         </button>
+
+        <div id="teacher-login" style="display:none;" class="mb-12">
+          <div class="card">
+            <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Password Dosen</div>
+            <div style="display:flex;gap:8px;">
+              <input id="teacher-pw" type="password" placeholder="Masukkan password" style="flex:1;"
+                onkeydown="if(event.key==='Enter')window._checkTeacherPw()">
+              <button class="btn btn-yellow" style="width:auto;padding:10px 16px;font-size:14px;" onclick="window._checkTeacherPw()">OK</button>
+            </div>
+            <div id="pw-msg" style="margin-top:6px;"></div>
+          </div>
+        </div>
 
         <div class="text-center" style="color:var(--border);font-size:13px;margin:12px 0;">— atau —</div>
 
@@ -275,6 +287,24 @@ function showRoleSelect() {
     }
   });
 }
+
+// ─── Teacher password (ganti sesuai keinginan) ───
+const TEACHER_PASSWORD = "dosen123";
+
+window._showTeacherLogin = function() {
+  const el = document.getElementById("teacher-login");
+  if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+};
+
+window._checkTeacherPw = function() {
+  const pw = document.getElementById("teacher-pw")?.value;
+  const msgEl = document.getElementById("pw-msg");
+  if (pw === TEACHER_PASSWORD) {
+    window._selectRole("teacher");
+  } else {
+    if (msgEl) msgEl.innerHTML = '<div class="msg msg-err" style="margin-top:6px;padding:6px 10px;font-size:12px;">❌ Password salah</div>';
+  }
+};
 
 window._selectRole = function(role) {
   if (!role) return;
@@ -423,6 +453,12 @@ function renderTeacherUI() {
     return;
   }
 
+  // === FINAL LEADERBOARD ===
+  if (state.phase === "final") {
+    renderFinalLeaderboard(state);
+    return;
+  }
+
   const players = state.players ? Object.values(state.players) : [];
   const joinedB = players.filter(p => p.role === "buyer" && p.joined).length;
   const joinedS = players.filter(p => p.role === "seller" && p.joined).length;
@@ -434,13 +470,17 @@ function renderTeacherUI() {
     tradeAvg = Math.round(trades.reduce((s, t) => s + t.price, 0) / trades.length);
   }
 
+  const phaseColor = state.phase === "join" ? "var(--cyan)" : state.phase === "trade" ? "var(--yellow)" : "var(--purple)";
+  const phaseBg = state.phase === "join" ? "var(--cyan-bg)" : state.phase === "trade" ? "var(--yellow-bg)" : "var(--purple-bg)";
+  const phaseLabel = state.phase === "join" ? "⏳ Menunggu peserta" : state.phase === "trade" ? "🔥 Trading aktif" : "📊 Hasil";
+
   document.getElementById("app").innerHTML = `
     <div class="container">
       <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-12">
         <div>
-          <h2 style="color:var(--yellow);font-size:18px;">📊 ${state.good || "?"} — Round ${state.round || 1}</h2>
-          <span class="badge mt-4" style="margin-top:6px;background:${state.phase === "join" ? "var(--cyan-bg)" : state.phase === "trade" ? "var(--yellow-bg)" : "var(--purple-bg)"};color:${state.phase === "join" ? "var(--cyan)" : state.phase === "trade" ? "var(--yellow)" : "var(--purple)"};">
-            ${state.phase === "join" ? "⏳ Menunggu peserta" : state.phase === "trade" ? "🔥 Trading aktif" : "📊 Hasil"}
+          <h2 style="color:var(--yellow);font-size:18px;">📊 ${state.good || "?"} — Round ${state.round || 1}/${state.totalRounds || "?"}</h2>
+          <span class="badge mt-4" style="margin-top:6px;background:${phaseBg};color:${phaseColor};">
+            ${phaseLabel}
           </span>
         </div>
         <button class="btn btn-outline btn-sm" onclick="window._resetMarket()" style="width:auto;padding:6px 14px;font-size:12px;border-color:var(--red);color:var(--red);">Reset</button>
@@ -495,8 +535,9 @@ function renderTeacherUI() {
 
       <div class="mt-16" style="display:flex;flex-direction:column;gap:8px;">
         ${state.phase === "join" ? `<button class="btn btn-yellow" onclick="window._openTrading()">🔔 Buka Trading</button>` : ""}
-        ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup & Lihat Hasil</button>` : ""}
-        ${state.phase === "results" || state.phase === "trade" ? `
+        ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup Round ${state.round || 1}</button>` : ""}
+        ${state.phase === "results" ? `<button class="btn btn-cyan" onclick="window._nextRound()">▶️ Mulai Round ${(state.round || 1) + 1}/${state.totalRounds || "?"}</button>` : ""}
+        ${state.phase === "trade" ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="shock-btn" style="border-color:var(--cyan);color:var(--cyan);" onclick="window._applyShock('demand_up')">📈 Demand +30%</button>
             <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_down')">📉 Supply Cost +30%</button>
@@ -524,6 +565,63 @@ function renderTeacherUI() {
     </div>`;
 }
 
+// ─── FINAL LEADERBOARD ───
+function renderFinalLeaderboard(state) {
+  const players = state.players ? Object.values(state.players) : [];
+  const ranked = players
+    .filter(p => p.joined)
+    .map(p => ({ ...p, totalSurplus: p.totalSurplus || 0 }))
+    .sort((a, b) => b.totalSurplus - a.totalSurplus);
+
+  const top3 = ranked.slice(0, 3);
+  const medals = ["🥇", "🥈", "🥉"];
+
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="padding-top:24px;">
+      <div class="text-center mb-16">
+        <div style="font-size:56px;margin-bottom:8px;">🏆</div>
+        <h2 style="color:var(--yellow);font-size:22px;margin-bottom:4px;">Game Selesai!</h2>
+        <p style="color:var(--label);font-size:14px;">${state.good} — ${state.totalRounds} round</p>
+      </div>
+
+      <!-- Top 3 -->
+      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+        ${top3.map((p, i) => `
+          <div class="card text-center" style="min-width:100px;flex:1;max-width:140px;border:2px solid ${i === 0 ? "var(--yellow)" : i === 1 ? "#c0c0c0" : "#cd7f32"};">
+            <div style="font-size:32px;">${medals[i]}</div>
+            <div style="color:var(--text);font-size:14px;font-weight:700;margin-top:4px;">${p.name || p.id}</div>
+            <div style="color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};font-size:11px;">${p.id} (${p.role === "buyer" ? "Buyer" : "Seller"})</div>
+            <div class="stat-num" style="color:var(--yellow);font-size:18px;margin-top:6px;">+${fmt(p.totalSurplus)}</div>
+            <div class="stat-label">Total Surplus</div>
+          </div>
+        `).join("")}
+      </div>
+
+      <!-- Full ranking -->
+      <div class="card">
+        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">📋 Ranking Lengkap</div>
+        <div style="max-height:400px;overflow-y:auto;">
+          ${ranked.map((p, i) => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:4px;${i < 3 ? "background:var(--yellow-bg);" : i % 2 === 0 ? "background:var(--bg3);" : ""}">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="color:var(--muted);font-size:12px;width:24px;text-align:right;font-family:'JetBrains Mono',monospace;">${i + 1}.</span>
+                <span style="color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};font-size:11px;font-family:'JetBrains Mono',monospace;width:28px;">${p.id}</span>
+                <span style="color:var(--text);font-size:13px;">${p.name || "-"}</span>
+              </div>
+              <span style="color:${p.totalSurplus > 0 ? "var(--yellow)" : p.totalSurplus === 0 ? "var(--muted)" : "var(--red)"};font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;">
+                ${p.totalSurplus > 0 ? "+" : ""}${fmt(p.totalSurplus)}
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <button class="btn btn-outline mt-16" onclick="window._resetMarket()" style="border-color:var(--red);color:var(--red);">🔄 Reset & Main Lagi</button>
+
+      <div style="height:40px;"></div>
+    </div>`;
+}
+
 function renderSetupScreen() {
   document.getElementById("app").innerHTML = `
     <div class="container" style="padding-top:40px;">
@@ -545,6 +643,12 @@ function renderSetupScreen() {
         <div style="color:var(--muted);font-size:11px;margin-top:6px;">Otomatis dibagi 2: setengah jadi Buyer, setengah Seller. Kalau ganjil, Buyer dapat 1 lebih.</div>
       </div>
 
+      <div class="card" style="margin-bottom:16px;">
+        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Jumlah sesi perdagangan (round)</div>
+        <input id="num-rounds" type="number" value="3" min="1" max="10" placeholder="3" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
+        <div style="color:var(--muted);font-size:11px;margin-top:6px;">Setelah round terakhir, mahasiswa dengan total surplus tertinggi menang! 🏆</div>
+      </div>
+
       <button class="btn btn-cyan" onclick="window._createMarket()">Buat Pasar →</button>
 
       <div style="height:40px;"></div>
@@ -562,17 +666,18 @@ window._selectScenario = function(key, el) {
 window._createMarket = async function() {
   const sc = SCENARIOS[selectedScenario];
   const total = parseInt(document.getElementById("num-students")?.value) || 42;
+  const totalRounds = parseInt(document.getElementById("num-rounds")?.value) || 3;
   const numSellers = Math.floor(total / 2);
   const numBuyers = total - numSellers;
   const players = {};
 
   for (let i = 1; i <= numBuyers; i++) {
     const bid = `B${String(i).padStart(2, "0")}`;
-    players[bid] = { id: bid, role: "buyer", valuation: rng(sc.buyerMin, sc.buyerMax), name: "", joined: false };
+    players[bid] = { id: bid, role: "buyer", valuation: rng(sc.buyerMin, sc.buyerMax), name: "", joined: false, totalSurplus: 0 };
   }
   for (let i = 1; i <= numSellers; i++) {
     const sid = `S${String(i).padStart(2, "0")}`;
-    players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false };
+    players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false, totalSurplus: 0 };
   }
 
   await set(ref(db, "market"), {
@@ -580,10 +685,13 @@ window._createMarket = async function() {
     good: sc.good,
     unit: sc.unit,
     round: 1,
+    totalRounds: totalRounds,
     numBuyers: numBuyers,
     numSellers: numSellers,
     players: players,
     trades: {},
+    pending: {},
+    roundHistory: {},
     priceCeiling: null,
     shockLabel: null,
     createdAt: Date.now(),
@@ -595,7 +703,72 @@ window._openTrading = async function() {
 };
 
 window._closeTrading = async function() {
-  await update(ref(db, "market"), { phase: "results" });
+  const snap = await get(ref(db, "market"));
+  const state = snap.val();
+  if (!state) return;
+
+  const trades = state.trades ? Object.values(state.trades) : [];
+  const updates = {};
+
+  // Calculate surplus for each trade and accumulate to players
+  trades.forEach(t => {
+    const buyer = state.players[t.buyerId];
+    const seller = state.players[t.sellerId];
+    if (buyer && seller) {
+      const buyerSurplus = buyer.valuation - t.price;
+      const sellerSurplus = t.price - seller.valuation;
+      updates[`players/${t.buyerId}/totalSurplus`] = (buyer.totalSurplus || 0) + buyerSurplus;
+      updates[`players/${t.sellerId}/totalSurplus`] = (seller.totalSurplus || 0) + sellerSurplus;
+    }
+  });
+
+  // Save round history
+  updates[`roundHistory/round_${state.round}`] = {
+    trades: state.trades || {},
+    round: state.round,
+    shockLabel: state.shockLabel || null,
+    priceCeiling: state.priceCeiling || null,
+  };
+
+  const currentRound = state.round || 1;
+  const totalRounds = state.totalRounds || 3;
+
+  if (currentRound >= totalRounds) {
+    // Final round — show leaderboard
+    updates["phase"] = "final";
+  } else {
+    // Show results, then dosen can start next round
+    updates["phase"] = "results";
+  }
+
+  await update(ref(db, "market"), updates);
+};
+
+window._nextRound = async function() {
+  const snap = await get(ref(db, "market"));
+  const state = snap.val();
+  if (!state) return;
+
+  const sc = SCENARIOS[selectedScenario] || { buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000 };
+  const updates = {};
+
+  // Re-randomize valuations for new round
+  Object.entries(state.players).forEach(([id, p]) => {
+    if (p.role === "buyer") {
+      updates[`players/${id}/valuation`] = rng(sc.buyerMin, sc.buyerMax);
+    } else {
+      updates[`players/${id}/valuation`] = rng(sc.sellerMin, sc.sellerMax);
+    }
+  });
+
+  updates["round"] = (state.round || 1) + 1;
+  updates["trades"] = {};
+  updates["pending"] = {};
+  updates["phase"] = "trade";
+  updates["shockLabel"] = null;
+  updates["priceCeiling"] = null;
+
+  await update(ref(db, "market"), updates);
 };
 
 window._resetMarket = async function() {
@@ -746,8 +919,38 @@ function renderStudentUI(playerId) {
   if (state.phase === "results") {
     phaseUI += `
       <div class="mt-16">
-        <h3 style="color:var(--purple);font-size:16px;margin-bottom:8px;">📊 Hasil Pasar</h3>
+        <h3 style="color:var(--purple);font-size:16px;margin-bottom:8px;">📊 Hasil Round ${state.round || 1}/${state.totalRounds || "?"}</h3>
         ${renderChart(state)}
+        <div class="card mt-12 text-center">
+          <div class="stat-label">Total Surplus Kamu (semua round)</div>
+          <div class="stat-num" style="color:var(--yellow);font-size:22px;">+${fmt(me.totalSurplus || 0)}</div>
+        </div>
+        <div style="color:var(--muted);font-size:13px;margin-top:10px;text-align:center;" class="waiting-pulse">⏳ Menunggu dosen memulai round berikutnya...</div>
+      </div>`;
+  }
+
+  if (state.phase === "final") {
+    const allPlayers = Object.values(state.players).filter(p => p.joined).sort((a, b) => (b.totalSurplus || 0) - (a.totalSurplus || 0));
+    const myRank = allPlayers.findIndex(p => p.id === playerId) + 1;
+    const medals = ["🥇", "🥈", "🥉"];
+    phaseUI = `
+      <div class="text-center" style="padding:20px 0;">
+        <div style="font-size:56px;margin-bottom:8px;">${myRank <= 3 ? medals[myRank - 1] : "🏆"}</div>
+        <h2 style="color:var(--yellow);font-size:20px;margin-bottom:4px;">Game Selesai!</h2>
+        <p style="color:var(--label);font-size:14px;margin-bottom:16px;">Peringkat kamu: <strong style="color:var(--yellow);">#${myRank}</strong> dari ${allPlayers.length} pemain</p>
+        <div class="card">
+          <div class="stat-label">Total Surplus Kamu</div>
+          <div class="stat-num" style="color:var(--yellow);font-size:28px;">${(me.totalSurplus || 0) > 0 ? "+" : ""}${fmt(me.totalSurplus || 0)}</div>
+        </div>
+        <div class="card mt-12" style="text-align:left;">
+          <div style="color:var(--label);font-size:12px;margin-bottom:8px;">🏆 Top 10</div>
+          ${allPlayers.slice(0, 10).map((p, i) => `
+            <div style="display:flex;justify-content:space-between;padding:6px 8px;border-radius:4px;${p.id === playerId ? "background:var(--yellow-bg);border:1px solid var(--yellow);" : i % 2 === 0 ? "background:var(--bg3);" : ""}">
+              <span style="color:${p.id === playerId ? "var(--yellow)" : "var(--text)"};font-size:13px;">${i < 3 ? medals[i] : (i+1)+"."} ${p.name || p.id}</span>
+              <span style="color:var(--yellow);font-size:13px;font-family:'JetBrains Mono',monospace;font-weight:700;">+${fmt(p.totalSurplus || 0)}</span>
+            </div>
+          `).join("")}
+        </div>
       </div>`;
   }
 
@@ -756,7 +959,7 @@ function renderStudentUI(playerId) {
       <div style="background:${isBuyer ? "linear-gradient(135deg, #0d2520, #0a1a18)" : "linear-gradient(135deg, #200d0d, #1a0a0a)"};border-radius:12px;padding:16px;margin-bottom:16px;border:2px solid ${isBuyer ? "#4ecdc430" : "#ff6b6b30"};">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <div>
-            <div style="color:var(--label);font-size:11px;">${playerId} — ${me.name}</div>
+            <div style="color:var(--label);font-size:11px;">${playerId} — ${me.name} | Round ${state.round || 1}/${state.totalRounds || "?"}</div>
             <div style="color:${isBuyer ? "var(--cyan)" : "var(--red)"};font-size:22px;font-weight:800;margin-top:4px;">
               ${isBuyer ? "🛒 BUYER" : "🏪 SELLER"}
             </div>
@@ -766,10 +969,11 @@ function renderStudentUI(playerId) {
             <div style="color:var(--yellow);font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmt(me.valuation)}</div>
           </div>
         </div>
-        <div style="margin-top:10px;padding:8px 12px;background:#0a0f1a80;border-radius:6px;font-size:12px;color:var(--label);">
-          ${isBuyer
-            ? `Kamu bersedia bayar MAKSIMAL Rp${fmt(me.valuation)} untuk ${state.good}. Cari seller yang mau jual lebih murah!`
-            : `Kamu bersedia jual MINIMAL Rp${fmt(me.valuation)} untuk ${state.good}. Cari buyer yang mau bayar lebih mahal!`}
+        <div style="display:flex;justify-content:space-between;margin-top:10px;padding:8px 12px;background:#0a0f1a80;border-radius:6px;font-size:12px;color:var(--label);">
+          <span>${isBuyer
+            ? `Max bayar Rp${fmt(me.valuation)} untuk ${state.good}`
+            : `Min jual Rp${fmt(me.valuation)} untuk ${state.good}`}</span>
+          <span style="color:var(--yellow);font-weight:700;">Σ +${fmt(me.totalSurplus || 0)}</span>
         </div>
       </div>
 
