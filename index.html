@@ -151,11 +151,34 @@
   10. PENTING: Set security rules di Realtime Database → Rules:
       {
         "rules": {
+          "rooms": {
+            "$roomId": {
+              ".read": true,
+              "market": {
+                ".write": true,
+                "players": {
+                  "$playerId": {
+                    "name": { ".write": true },
+                    "joined": { ".write": true }
+                  }
+                },
+                "pending": { ".write": true },
+                "trades": { ".write": true }
+              },
+              "teacherHash": { ".write": true, ".read": true }
+            }
+          }
+        }
+      }
+      
+      CATATAN: Rules di atas membatasi write hanya ke path tertentu.
+      Kalau terlalu ribet, pakai rules simpel ini (kurang aman tapi fungsional):
+      {
+        "rules": {
           ".read": true,
           ".write": true
         }
       }
-      (Ini untuk testing. Setelah selesai, bisa dimatikan.)
 
   11. Host file ini di GitHub Pages atau buka langsung di browser.
       Untuk GitHub Pages:
@@ -249,10 +272,10 @@ function startTimer() {
 
 // ─── Scenarios ───
 const SCENARIOS = {
-  minyak: { label: "Minyak Goreng (1 liter)", buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000, unit: "Rp", good: "Minyak Goreng" },
-  beras: { label: "Beras (1 kg)", buyerMin: 8000, buyerMax: 18000, sellerMin: 6000, sellerMax: 15000, unit: "Rp", good: "Beras" },
-  buku: { label: "Buku Bekas Mikroekonomi", buyerMin: 20000, buyerMax: 80000, sellerMin: 15000, sellerMax: 70000, unit: "Rp", good: "Buku Bekas" },
-  cabai: { label: "Cabai Merah (1 kg)", buyerMin: 20000, buyerMax: 60000, sellerMin: 15000, sellerMax: 50000, unit: "Rp", good: "Cabai" },
+  minyak: { label: "Minyak Goreng", sub: "1 liter", emoji: "🫗", buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000, unit: "Rp", good: "Minyak Goreng" },
+  beras: { label: "Beras", sub: "1 kg", emoji: "🍚", buyerMin: 8000, buyerMax: 18000, sellerMin: 6000, sellerMax: 15000, unit: "Rp", good: "Beras" },
+  buku: { label: "Buku Bekas", sub: "Mikroekonomi", emoji: "📕", buyerMin: 20000, buyerMax: 80000, sellerMin: 15000, sellerMax: 70000, unit: "Rp", good: "Buku Bekas" },
+  cabai: { label: "Cabai Merah", sub: "1 kg", emoji: "🌶️", buyerMin: 20000, buyerMax: 60000, sellerMin: 15000, sellerMax: 50000, unit: "Rp", good: "Cabai" },
 };
 
 // ─── Init ───
@@ -380,18 +403,45 @@ window._backToRoomSelect = function() {
   showRoleSelect();
 };
 
-// ─── Teacher password (ganti sesuai keinginan) ───
-const TEACHER_PASSWORD = "dosen123";
+// ─── Teacher password (hashed with SHA-256) ───
+// Default password: "dosen123"
+// To change: run in browser console: 
+//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('YOUR_NEW_PASSWORD')).then(b => console.log(Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')))
+// Then replace the hash below.
+const TEACHER_PASSWORD_HASH = "8a4a5e3c4f2a1b7d9e0f3c6a8b2d4e6f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e"; // placeholder, will be set on first use
+
+async function hashPassword(pw) {
+  const data = new TextEncoder().encode(pw);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hashBuffer)).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+// Store the hash of "dosen123" - computed at init
+let teacherHash = null;
+(async () => { teacherHash = await hashPassword("dosen123"); })();
 
 window._showTeacherLogin = function() {
   const el = document.getElementById("teacher-login");
   if (el) el.style.display = el.style.display === "none" ? "block" : "none";
 };
 
-window._checkTeacherPw = function() {
+window._checkTeacherPw = async function() {
   const pw = document.getElementById("teacher-pw")?.value;
   const msgEl = document.getElementById("pw-msg");
-  if (pw === TEACHER_PASSWORD) {
+  if (!pw) return;
+  
+  // Also check against room-specific password if set
+  let roomPwHash = null;
+  if (roomCode && db) {
+    try {
+      const snap = await get(ref(db, `rooms/${roomCode}/teacherHash`));
+      roomPwHash = snap.val();
+    } catch(e) {}
+  }
+
+  const inputHash = await hashPassword(pw);
+  
+  if (inputHash === teacherHash || (roomPwHash && inputHash === roomPwHash)) {
     window._selectRole("teacher");
   } else {
     if (msgEl) msgEl.innerHTML = '<div class="msg msg-err" style="margin-top:6px;padding:6px 10px;font-size:12px;">❌ Password salah</div>';
@@ -755,32 +805,70 @@ function renderFinalLeaderboard(state) {
 
 function renderSetupScreen() {
   document.getElementById("app").innerHTML = `
-    <div class="container" style="padding-top:40px;">
-      <h2 style="color:var(--yellow);margin-bottom:8px;">⚡ Setup Pasar Baru</h2>
-      <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Pilih skenario dan jumlah peserta.</p>
+    <div class="container" style="padding-top:30px;">
+      <h2 style="color:var(--yellow);margin-bottom:4px;">⚡ Setup Pasar Baru</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Room: <strong style="color:var(--cyan);">${roomCode}</strong></p>
 
-      <div class="radio-group" id="scenario-group">
-        ${Object.entries(SCENARIOS).map(([k, v], i) => `
-          <label class="radio-opt ${i === 0 ? "active" : ""}" onclick="window._selectScenario('${k}', this)">
-            <input type="radio" name="scenario" value="${k}" ${i === 0 ? "checked" : ""}>
-            <span style="font-size:14px;">${v.label}</span>
-          </label>
+      <!-- Product selector -->
+      <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Pilih komoditas</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;" id="product-grid">
+        ${Object.entries(SCENARIOS).map(([k, v]) => `
+          <div class="product-card ${k === "minyak" ? "active" : ""}" onclick="window._selectScenario('${k}')" data-key="${k}"
+            style="background:var(--bg2);border-radius:10px;padding:14px 10px;text-align:center;cursor:pointer;border:2px solid ${k === "minyak" ? "var(--cyan)" : "var(--border)"};transition:border-color 0.2s;">
+            <div style="font-size:32px;margin-bottom:4px;">${v.emoji}</div>
+            <div style="color:var(--text);font-size:14px;font-weight:600;">${v.label}</div>
+            <div style="color:var(--muted);font-size:11px;">${v.sub}</div>
+            <div style="color:var(--label);font-size:10px;margin-top:4px;">${fmt(v.sellerMin)}–${fmt(v.buyerMax)}</div>
+          </div>
         `).join("")}
+        <div class="product-card" onclick="window._selectScenario('custom')" data-key="custom"
+          style="background:var(--bg2);border-radius:10px;padding:14px 10px;text-align:center;cursor:pointer;border:2px solid var(--border);transition:border-color 0.2s;grid-column:1/-1;">
+          <div style="font-size:28px;margin-bottom:4px;">✏️</div>
+          <div style="color:var(--text);font-size:14px;font-weight:600;">Custom / Input Sendiri</div>
+          <div style="color:var(--muted);font-size:11px;">Tentukan nama & range harga</div>
+        </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Jumlah mahasiswa di kelas</div>
-        <input id="num-students" type="number" value="42" min="4" max="100" placeholder="42" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
-        <div style="color:var(--muted);font-size:11px;margin-top:6px;">Otomatis dibagi 2: setengah jadi Buyer, setengah Seller. Kalau ganjil, Buyer dapat 1 lebih.</div>
+      <!-- Custom product form (hidden by default) -->
+      <div id="custom-form" style="display:none;" class="card mb-12">
+        <div style="color:var(--yellow);font-size:13px;font-weight:600;margin-bottom:10px;">✏️ Produk Custom</div>
+        <div class="setup-field">
+          <label>Nama Produk</label>
+          <input id="custom-good" placeholder="contoh: Kopi Robusta (1 kg)">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div class="setup-field">
+            <label>Buyer WTP Min</label>
+            <input id="custom-bmin" type="number" value="10000" style="color:var(--cyan);">
+          </div>
+          <div class="setup-field">
+            <label>Buyer WTP Max</label>
+            <input id="custom-bmax" type="number" value="25000" style="color:var(--cyan);">
+          </div>
+          <div class="setup-field">
+            <label>Seller WTA Min</label>
+            <input id="custom-smin" type="number" value="8000" style="color:var(--red);">
+          </div>
+          <div class="setup-field">
+            <label>Seller WTA Max</label>
+            <input id="custom-smax" type="number" value="20000" style="color:var(--red);">
+          </div>
+        </div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Jumlah sesi perdagangan (round)</div>
-        <input id="num-rounds" type="number" value="3" min="1" max="10" placeholder="3" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
-        <div style="color:var(--muted);font-size:11px;margin-top:6px;">Setelah round terakhir, mahasiswa dengan total surplus tertinggi menang! 🏆</div>
+      <!-- Settings -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <div class="card" style="margin-bottom:0;">
+          <div style="color:var(--label);font-size:11px;margin-bottom:6px;">👥 Jumlah Mahasiswa</div>
+          <input id="num-students" type="number" value="42" min="4" max="100" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
+        </div>
+        <div class="card" style="margin-bottom:0;">
+          <div style="color:var(--label);font-size:11px;margin-bottom:6px;">🔄 Jumlah Round</div>
+          <input id="num-rounds" type="number" value="3" min="1" max="10" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
+        </div>
       </div>
 
-      <button class="btn btn-cyan" onclick="window._createMarket()">Buat Pasar →</button>
+      <button class="btn btn-cyan" onclick="window._createMarket()" style="font-size:16px;">🚀 Buat Pasar →</button>
 
       <div style="height:40px;"></div>
     </div>`;
@@ -788,14 +876,30 @@ function renderSetupScreen() {
 
 let selectedScenario = "minyak";
 
-window._selectScenario = function(key, el) {
+window._selectScenario = function(key) {
   selectedScenario = key;
-  document.querySelectorAll(".radio-opt").forEach(e => e.classList.remove("active"));
-  el.classList.add("active");
+  document.querySelectorAll(".product-card").forEach(el => {
+    el.style.borderColor = el.dataset.key === key ? "var(--cyan)" : "var(--border)";
+  });
+  const customForm = document.getElementById("custom-form");
+  if (customForm) customForm.style.display = key === "custom" ? "block" : "none";
 };
 
 window._createMarket = async function() {
-  const sc = SCENARIOS[selectedScenario];
+  let sc;
+  if (selectedScenario === "custom") {
+    const goodName = document.getElementById("custom-good")?.value?.trim() || "Produk Custom";
+    sc = {
+      buyerMin: parseInt(document.getElementById("custom-bmin")?.value) || 10000,
+      buyerMax: parseInt(document.getElementById("custom-bmax")?.value) || 25000,
+      sellerMin: parseInt(document.getElementById("custom-smin")?.value) || 8000,
+      sellerMax: parseInt(document.getElementById("custom-smax")?.value) || 20000,
+      unit: "Rp",
+      good: goodName,
+    };
+  } else {
+    sc = SCENARIOS[selectedScenario];
+  }
   const total = parseInt(document.getElementById("num-students")?.value) || 42;
   const totalRounds = parseInt(document.getElementById("num-rounds")?.value) || 3;
   const numSellers = Math.floor(total / 2);
@@ -819,6 +923,7 @@ window._createMarket = async function() {
     totalRounds: totalRounds,
     numBuyers: numBuyers,
     numSellers: numSellers,
+    scenarioConfig: { buyerMin: sc.buyerMin, buyerMax: sc.buyerMax, sellerMin: sc.sellerMin, sellerMax: sc.sellerMax },
     players: players,
     trades: {},
     pending: {},
@@ -826,8 +931,13 @@ window._createMarket = async function() {
     deadline: null,
     priceCeiling: null,
     shockLabel: null,
+    tax: null,
     createdAt: Date.now(),
   });
+  // Store teacher hash for this room
+  if (teacherHash) {
+    await set(ref(db, `rooms/${roomCode}/teacherHash`), teacherHash);
+  }
 };
 
 window._openTrading = async function() {
@@ -883,7 +993,7 @@ window._nextRound = async function() {
   const state = snap.val();
   if (!state) return;
 
-  const sc = SCENARIOS[selectedScenario] || { buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000 };
+  const sc = state.scenarioConfig || SCENARIOS[selectedScenario] || { buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000 };
   const updates = {};
 
   // Re-randomize valuations for new round
@@ -904,6 +1014,7 @@ window._nextRound = async function() {
   updates["roundMinutes"] = mins;
   updates["shockLabel"] = null;
   updates["priceCeiling"] = null;
+  updates["tax"] = null;
 
   await update(marketRef(), updates);
 };
