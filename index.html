@@ -640,6 +640,7 @@ function renderTeacherUI() {
       ` : ""}
 
       ${state.priceCeiling ? `<div class="msg msg-err mt-12">⛔ HET aktif: transaksi di atas ${fmt(state.priceCeiling)} tidak diperbolehkan</div>` : ""}
+      ${state.tax ? `<div class="msg mt-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak aktif: Rp${fmt(state.tax)} per unit. WTA seller sudah dinaikkan sebesar pajak.</div>` : ""}
 
       <div class="mt-16" style="display:flex;flex-direction:column;gap:8px;">
         ${state.phase === "join" ? `
@@ -664,10 +665,14 @@ function renderTeacherUI() {
           </div>
         ` : ""}
         ${state.phase === "trade" ? `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <div style="color:var(--label);font-size:11px;margin-top:8px;margin-bottom:6px;">⚡ Shock (reset round, valuasi berubah):</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
             <button class="shock-btn" style="border-color:var(--cyan);color:var(--cyan);" onclick="window._applyShock('demand_up')">📈 Demand +30%</button>
-            <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_down')">📉 Supply Cost +30%</button>
+            <button class="shock-btn" style="border-color:#5a9aba;color:#5a9aba;" onclick="window._applyShock('demand_down')">📉 Demand -30%</button>
+            <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_up')">📈 Supply Cost +30%</button>
+            <button class="shock-btn" style="border-color:#ba6a5a;color:#ba6a5a;" onclick="window._applyShock('supply_down')">📉 Supply Cost -30%</button>
             <button class="shock-btn" style="border-color:var(--yellow);color:var(--yellow);" onclick="window._applyShock('price_ceiling')">⛔ Pasang HET</button>
+            <button class="shock-btn" style="border-color:var(--purple);color:var(--purple);" onclick="window._applyShock('tax')">💰 Pajak per Unit</button>
           </div>
         ` : ""}
       </div>
@@ -921,18 +926,45 @@ window._applyShock = async function(type) {
         updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
       }
     });
-    updates["shockLabel"] = "🔺 Demand Shock: WTP naik 30%";
-  } else if (type === "supply_down") {
+    updates["shockLabel"] = "📈 Demand Shock: WTP semua buyer naik 30% (pendapatan konsumen naik)";
+  } else if (type === "demand_down") {
+    Object.entries(state.players).forEach(([id, p]) => {
+      if (p.role === "buyer") {
+        updates[`players/${id}/valuation`] = Math.round(p.valuation * 0.7);
+      }
+    });
+    updates["shockLabel"] = "📉 Demand Shock: WTP semua buyer turun 30% (resesi, konsumen hemat)";
+  } else if (type === "supply_up") {
     Object.entries(state.players).forEach(([id, p]) => {
       if (p.role === "seller") {
         updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
       }
     });
-    updates["shockLabel"] = "🔺 Supply Shock: WTA naik 30% (biaya produksi naik)";
+    updates["shockLabel"] = "📈 Supply Shock: biaya produksi naik 30% (harga input naik, gagal panen)";
+  } else if (type === "supply_down") {
+    Object.entries(state.players).forEach(([id, p]) => {
+      if (p.role === "seller") {
+        updates[`players/${id}/valuation`] = Math.round(p.valuation * 0.7);
+      }
+    });
+    updates["shockLabel"] = "📉 Supply Shock: biaya produksi turun 30% (teknologi baru, panen melimpah)";
   } else if (type === "price_ceiling") {
     const eq = computeEquilibrium(state);
     updates["priceCeiling"] = Math.round(eq.price * 0.7);
-    updates["shockLabel"] = `⛔ Price Ceiling: HET ${fmt(Math.round(eq.price * 0.7))}`;
+    updates["tax"] = null;
+    updates["shockLabel"] = `⛔ Price Ceiling: HET ${fmt(Math.round(eq.price * 0.7))} (pemerintah tetapkan harga maksimum)`;
+  } else if (type === "tax") {
+    const eq = computeEquilibrium(state);
+    const taxAmount = Math.round(eq.price * 0.3);
+    // Tax = seller WTA naik sebesar pajak (seller harus cover pajak)
+    Object.entries(state.players).forEach(([id, p]) => {
+      if (p.role === "seller") {
+        updates[`players/${id}/valuation`] = p.valuation + taxAmount;
+      }
+    });
+    updates["tax"] = taxAmount;
+    updates["priceCeiling"] = null;
+    updates["shockLabel"] = `💰 Pajak: Rp${fmt(taxAmount)} per unit (30% dari P*). Seller harus cover pajak dari harga jual.`;
   }
 
   updates["trades"] = {};
@@ -1120,6 +1152,7 @@ function renderStudentUI(playerId) {
       </div>
 
       ${state.priceCeiling ? `<div class="msg msg-err mb-12">⛔ HET aktif: harga tidak boleh di atas ${fmt(state.priceCeiling)}</div>` : ""}
+      ${state.tax ? `<div class="msg mb-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak aktif: Rp${fmt(state.tax)} per unit ditanggung seller</div>` : ""}
       ${state.shockLabel ? `<div class="msg msg-warn mb-12">${state.shockLabel}</div>` : ""}
 
       ${phaseUI}
