@@ -588,9 +588,27 @@ function renderTeacherUI() {
       ${state.priceCeiling ? `<div class="msg msg-err mt-12">⛔ HET aktif: transaksi di atas ${fmt(state.priceCeiling)} tidak diperbolehkan</div>` : ""}
 
       <div class="mt-16" style="display:flex;flex-direction:column;gap:8px;">
-        ${state.phase === "join" ? `<button class="btn btn-yellow" onclick="window._openTrading()">🔔 Buka Trading</button>` : ""}
+        ${state.phase === "join" ? `
+          <div class="card" style="padding:12px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <div style="color:var(--label);font-size:12px;white-space:nowrap;">⏱ Waktu trading:</div>
+              <input id="round-time-input" type="number" value="${state.roundMinutes || 5}" min="1" max="30" style="width:70px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--yellow);padding:8px;">
+              <div style="color:var(--muted);font-size:12px;">menit</div>
+            </div>
+            <button class="btn btn-yellow" onclick="window._openTrading()">🔔 Buka Trading</button>
+          </div>
+        ` : ""}
         ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup Round ${state.round || 1}</button>` : ""}
-        ${state.phase === "results" ? `<button class="btn btn-cyan" onclick="window._nextRound()">▶️ Mulai Round ${(state.round || 1) + 1}/${state.totalRounds || "?"}</button>` : ""}
+        ${state.phase === "results" ? `
+          <div class="card" style="padding:12px;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+              <div style="color:var(--label);font-size:12px;white-space:nowrap;">⏱ Waktu round berikutnya:</div>
+              <input id="round-time-input" type="number" value="${state.roundMinutes || 5}" min="1" max="30" style="width:70px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--yellow);padding:8px;">
+              <div style="color:var(--muted);font-size:12px;">menit</div>
+            </div>
+            <button class="btn btn-cyan" onclick="window._nextRound()">▶️ Mulai Round ${(state.round || 1) + 1}/${state.totalRounds || "?"}</button>
+          </div>
+        ` : ""}
         ${state.phase === "trade" ? `
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <button class="shock-btn" style="border-color:var(--cyan);color:var(--cyan);" onclick="window._applyShock('demand_up')">📈 Demand +30%</button>
@@ -703,12 +721,6 @@ function renderSetupScreen() {
         <div style="color:var(--muted);font-size:11px;margin-top:6px;">Setelah round terakhir, mahasiswa dengan total surplus tertinggi menang! 🏆</div>
       </div>
 
-      <div class="card" style="margin-bottom:16px;">
-        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Waktu per round (menit)</div>
-        <input id="round-minutes" type="number" value="5" min="1" max="30" placeholder="5" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
-        <div style="color:var(--muted);font-size:11px;margin-top:6px;">Countdown timer. Transaksi otomatis ditutup saat waktu habis.</div>
-      </div>
-
       <button class="btn btn-cyan" onclick="window._createMarket()">Buat Pasar →</button>
 
       <div style="height:40px;"></div>
@@ -727,7 +739,6 @@ window._createMarket = async function() {
   const sc = SCENARIOS[selectedScenario];
   const total = parseInt(document.getElementById("num-students")?.value) || 42;
   const totalRounds = parseInt(document.getElementById("num-rounds")?.value) || 3;
-  const roundMinutes = parseInt(document.getElementById("round-minutes")?.value) || 5;
   const numSellers = Math.floor(total / 2);
   const numBuyers = total - numSellers;
   const players = {};
@@ -747,7 +758,6 @@ window._createMarket = async function() {
     unit: sc.unit,
     round: 1,
     totalRounds: totalRounds,
-    roundMinutes: roundMinutes,
     numBuyers: numBuyers,
     numSellers: numSellers,
     players: players,
@@ -762,9 +772,7 @@ window._createMarket = async function() {
 };
 
 window._openTrading = async function() {
-  const snap = await get(ref(db, "market"));
-  const state = snap.val();
-  const mins = state?.roundMinutes || 5;
+  const mins = parseInt(document.getElementById("round-time-input")?.value) || 5;
   const deadline = Date.now() + mins * 60 * 1000;
   await update(ref(db, "market"), { phase: "trade", deadline: deadline, roundMinutes: mins });
 };
@@ -828,11 +836,13 @@ window._nextRound = async function() {
     }
   });
 
+  const mins = parseInt(document.getElementById("round-time-input")?.value) || state.roundMinutes || 5;
   updates["round"] = (state.round || 1) + 1;
   updates["trades"] = {};
   updates["pending"] = {};
   updates["phase"] = "trade";
-  updates["deadline"] = Date.now() + (state.roundMinutes || 5) * 60 * 1000;
+  updates["deadline"] = Date.now() + mins * 60 * 1000;
+  updates["roundMinutes"] = mins;
   updates["shockLabel"] = null;
   updates["priceCeiling"] = null;
 
