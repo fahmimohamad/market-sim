@@ -499,6 +499,17 @@ function renderTeacherUI() {
         </div>
       </div>
 
+      ${(() => {
+        const notJoined = players.filter(p => !p.joined);
+        if (notJoined.length === 0) return "";
+        return `<div class="card mb-12" style="padding:10px 14px;">
+          <div style="color:var(--label);font-size:11px;margin-bottom:6px;">⚠️ Belum join (${notJoined.length}):</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            ${notJoined.map(p => `<span style="padding:2px 8px;border-radius:4px;font-size:12px;font-family:'JetBrains Mono',monospace;background:${p.role === "buyer" ? "var(--cyan-bg)" : "var(--red-bg)"};color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};">${p.id}</span>`).join("")}
+          </div>
+        </div>`;
+      })()}
+
       ${renderChart(state)}
 
       ${eq && eq.quantity > 0 ? `
@@ -823,6 +834,12 @@ function showStudent(playerId) {
 
 function renderStudentUI(playerId) {
   const state = marketState;
+
+  // Save current input values before re-render
+  const savedPartner = document.getElementById("partner-input")?.value || "";
+  const savedPrice = document.getElementById("price-input")?.value || "";
+  const savedMsg = document.getElementById("trade-msg")?.innerHTML || "";
+
   if (!state || !state.players || !state.players[playerId]) {
     document.getElementById("app").innerHTML = `
       <div class="container text-center" style="padding-top:80px;">
@@ -984,6 +1001,14 @@ function renderStudentUI(playerId) {
 
       <div style="height:40px;"></div>
     </div>`;
+
+  // Restore input values after re-render
+  const partnerEl = document.getElementById("partner-input");
+  const priceEl = document.getElementById("price-input");
+  const msgEl = document.getElementById("trade-msg");
+  if (partnerEl && savedPartner) partnerEl.value = savedPartner;
+  if (priceEl && savedPrice) priceEl.value = savedPrice;
+  if (msgEl && savedMsg) msgEl.innerHTML = savedMsg;
 }
 
 window._back = function() {
