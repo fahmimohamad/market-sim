@@ -215,7 +215,8 @@ function getTimeRemaining(state) {
 
 // Start a 1-second timer that updates countdown display and auto-closes
 function startTimer() {
-  if (timerInterval) clearInterval(timerInterval);
+  // Only start one timer
+  if (timerInterval) return;
   timerInterval = setInterval(async () => {
     const el = document.getElementById("countdown-display");
     if (!marketState || !marketState.deadline || marketState.phase !== "trade") {
@@ -226,15 +227,15 @@ function startTimer() {
     if (el) {
       el.textContent = formatCountdown(remaining);
       el.style.color = remaining <= 30000 ? "var(--red)" : remaining <= 60000 ? "var(--yellow)" : "var(--cyan)";
-      // Add pulse animation when < 30s
       el.style.animation = remaining <= 30000 ? "pulse 1s ease-in-out infinite" : "none";
     }
     // Auto-close for teacher
     if (remaining <= 0 && currentRole === "teacher") {
       clearInterval(timerInterval);
+      timerInterval = null;
       window._closeTrading();
     }
-  }, 1000);
+  }, 500);
 }
 
 // ─── Scenarios ───
@@ -523,7 +524,7 @@ function renderTeacherUI() {
           </span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          ${state.phase === "trade" && state.deadline ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;color:var(--cyan);">${formatCountdown(getTimeRemaining(state))}</div>` : ""}
+          ${state.phase === "trade" ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;color:var(--cyan);">${state.deadline ? formatCountdown(getTimeRemaining(state)) : "--:--"}</div>` : ""}
           <button class="btn btn-outline btn-sm" onclick="window._resetMarket()" style="width:auto;padding:6px 14px;font-size:12px;border-color:var(--red);color:var(--red);">Reset</button>
         </div>
       </div>
@@ -765,7 +766,7 @@ window._openTrading = async function() {
   const state = snap.val();
   const mins = state?.roundMinutes || 5;
   const deadline = Date.now() + mins * 60 * 1000;
-  await update(ref(db, "market"), { phase: "trade", deadline: deadline });
+  await update(ref(db, "market"), { phase: "trade", deadline: deadline, roundMinutes: mins });
 };
 
 window._closeTrading = async function() {
@@ -960,7 +961,7 @@ function renderStudentUI(playerId) {
     phaseUI = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
         <h3 style="color:var(--yellow);font-size:16px;margin:0;">🤝 Buat Transaksi</h3>
-        ${state.deadline ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--cyan);">${formatCountdown(getTimeRemaining(state))}</div>` : ""}
+        ${state.deadline ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--cyan);">${formatCountdown(getTimeRemaining(state))}</div>` : `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--muted);">--:--</div>`}
       </div>
       <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Nego dengan mahasiswa lain di kelas. Kedua pihak harus input partner ID dan harga yang <strong style="color:var(--yellow);">SAMA PERSIS</strong>.</p>
       ${myPendingInfo}
