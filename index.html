@@ -195,10 +195,19 @@ let currentRole = null; // "teacher" | "B01" | "S14" etc
 let marketState = null;
 let unsubscribe = null;
 let timerInterval = null;
+let roomCode = null; // Room code for multi-class support
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 const fmt = (v) => new Intl.NumberFormat("id-ID").format(v);
+
+// Helper: Firebase path for current room
+function roomRef(path) {
+  return ref(db, `rooms/${roomCode}/${path || ""}`);
+}
+function marketRef() {
+  return ref(db, `rooms/${roomCode}/market`);
+}
 
 function formatCountdown(ms) {
   if (ms <= 0) return "00:00";
@@ -264,10 +273,14 @@ function init() {
   showRoleSelect();
 }
 
-// ─── ROLE SELECT SCREEN ───
+// ─── ROOM SELECT SCREEN ───
 function showRoleSelect() {
-  const hasMarket = marketState && marketState.phase && marketState.phase !== "idle";
-  
+  if (unsubscribe) unsubscribe();
+  roomCode = null;
+  currentRole = null;
+  timerInterval && clearInterval(timerInterval);
+  timerInterval = null;
+
   document.getElementById("app").innerHTML = `
     <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
       <div style="width:100%;max-width:400px;">
@@ -275,6 +288,41 @@ function showRoleSelect() {
           <div style="font-size:48px;margin-bottom:8px;">📊</div>
           <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
           <p style="color:var(--muted);font-size:14px;">Supply & Demand — Interactive</p>
+        </div>
+
+        <div class="card mb-12">
+          <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Kode Kelas / Room</div>
+          <input id="room-code-input" placeholder="Contoh: MIKRO-A" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-size:18px;text-align:center;"
+            onkeydown="if(event.key==='Enter')window._enterRoom()">
+          <div style="color:var(--muted);font-size:11px;margin-top:6px;">Minta kode kelas ke dosen. Dosen: buat kode sendiri (bebas).</div>
+        </div>
+        <button class="btn btn-cyan mb-16" onclick="window._enterRoom()">Masuk Room →</button>
+        <div id="room-msg"></div>
+      </div>
+    </div>`;
+}
+
+window._enterRoom = function() {
+  const code = document.getElementById("room-code-input")?.value?.toUpperCase()?.trim()?.replace(/[^A-Z0-9\-]/g, "");
+  if (!code || code.length < 2) {
+    document.getElementById("room-msg").innerHTML = '<div class="msg msg-err">❌ Masukkan kode kelas (min 2 karakter)</div>';
+    return;
+  }
+  roomCode = code;
+  showRoomRoleSelect();
+};
+
+// ─── ROLE SELECT INSIDE ROOM ───
+function showRoomRoleSelect() {
+  if (unsubscribe) unsubscribe();
+
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
+      <div style="width:100%;max-width:400px;">
+        <div class="text-center mb-16">
+          <div style="font-size:48px;margin-bottom:8px;">📊</div>
+          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
+          <div style="margin-top:6px;"><span class="badge" style="background:var(--cyan-bg);color:var(--cyan);font-size:14px;padding:6px 16px;">Room: ${roomCode}</span></div>
         </div>
 
         <button class="btn btn-yellow mb-12" onclick="window._showTeacherLogin()">
@@ -310,12 +358,13 @@ function showRoleSelect() {
             <span style="color:var(--cyan);font-size:13px;" id="status-text"></span>
           </div>
         </div>
+
+        <button class="btn btn-outline mt-16" onclick="window._backToRoomSelect()" style="font-size:13px;padding:10px;">← Ganti Room</button>
       </div>
     </div>`;
 
-  // Listen for market state to show status
-  if (unsubscribe) unsubscribe();
-  unsubscribe = onValue(ref(db, "market"), (snap) => {
+  // Listen for market state in this room
+  unsubscribe = onValue(marketRef(), (snap) => {
     marketState = snap.val();
     const statusEl = document.getElementById("market-status");
     const statusText = document.getElementById("status-text");
@@ -326,6 +375,10 @@ function showRoleSelect() {
     }
   });
 }
+
+window._backToRoomSelect = function() {
+  showRoleSelect();
+};
 
 // ─── Teacher password (ganti sesuai keinginan) ───
 const TEACHER_PASSWORD = "dosen123";
@@ -478,7 +531,7 @@ function showTeacher() {
   if (unsubscribe) unsubscribe();
 
   // Listen to market state
-  unsubscribe = onValue(ref(db, "market"), (snap) => {
+  unsubscribe = onValue(marketRef(), (snap) => {
     marketState = snap.val();
     renderTeacherUI();
     startTimer();
@@ -519,9 +572,10 @@ function renderTeacherUI() {
       <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-12">
         <div>
           <h2 style="color:var(--yellow);font-size:18px;">📊 ${state.good || "?"} — Round ${state.round || 1}/${state.totalRounds || "?"}</h2>
-          <span class="badge mt-4" style="margin-top:6px;background:${phaseBg};color:${phaseColor};">
-            ${phaseLabel}
-          </span>
+          <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
+            <span class="badge" style="background:${phaseBg};color:${phaseColor};">${phaseLabel}</span>
+            <span class="badge" style="background:var(--cyan-bg);color:var(--cyan);">${roomCode}</span>
+          </div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           ${state.phase === "trade" ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:800;color:var(--cyan);">${state.deadline ? formatCountdown(getTimeRemaining(state)) : "--:--"}</div>` : ""}
@@ -752,7 +806,7 @@ window._createMarket = async function() {
     players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false, totalSurplus: 0 };
   }
 
-  await set(ref(db, "market"), {
+  await set(marketRef(), {
     phase: "join",
     good: sc.good,
     unit: sc.unit,
@@ -774,11 +828,11 @@ window._createMarket = async function() {
 window._openTrading = async function() {
   const mins = parseInt(document.getElementById("round-time-input")?.value) || 5;
   const deadline = Date.now() + mins * 60 * 1000;
-  await update(ref(db, "market"), { phase: "trade", deadline: deadline, roundMinutes: mins });
+  await update(marketRef(), { phase: "trade", deadline: deadline, roundMinutes: mins });
 };
 
 window._closeTrading = async function() {
-  const snap = await get(ref(db, "market"));
+  const snap = await get(marketRef());
   const state = snap.val();
   if (!state) return;
 
@@ -816,11 +870,11 @@ window._closeTrading = async function() {
     updates["phase"] = "results";
   }
 
-  await update(ref(db, "market"), updates);
+  await update(marketRef(), updates);
 };
 
 window._nextRound = async function() {
-  const snap = await get(ref(db, "market"));
+  const snap = await get(marketRef());
   const state = snap.val();
   if (!state) return;
 
@@ -846,16 +900,16 @@ window._nextRound = async function() {
   updates["shockLabel"] = null;
   updates["priceCeiling"] = null;
 
-  await update(ref(db, "market"), updates);
+  await update(marketRef(), updates);
 };
 
 window._resetMarket = async function() {
   if (!confirm("Reset pasar? Semua data akan hilang.")) return;
-  await set(ref(db, "market"), { phase: "idle" });
+  await set(marketRef(), { phase: "idle" });
 };
 
 window._applyShock = async function(type) {
-  const snap = await get(ref(db, "market"));
+  const snap = await get(marketRef());
   const state = snap.val();
   if (!state || !state.players) return;
 
@@ -886,14 +940,14 @@ window._applyShock = async function(type) {
   updates["phase"] = "trade";
   updates["round"] = (state.round || 1) + 1;
 
-  await update(ref(db, "market"), updates);
+  await update(marketRef(), updates);
 };
 
 // ─── STUDENT VIEW ───
 function showStudent(playerId) {
   if (unsubscribe) unsubscribe();
 
-  unsubscribe = onValue(ref(db, "market"), (snap) => {
+  unsubscribe = onValue(marketRef(), (snap) => {
     marketState = snap.val();
     renderStudentUI(playerId);
     startTimer();
@@ -1084,14 +1138,18 @@ function renderStudentUI(playerId) {
 
 window._back = function() {
   currentRole = null;
-  showRoleSelect();
+  if (roomCode) {
+    showRoomRoleSelect();
+  } else {
+    showRoleSelect();
+  }
 };
 
 window._joinGame = async function(playerId) {
   const nameInput = document.getElementById("name-input");
   if (!nameInput || !nameInput.value.trim()) return;
 
-  await update(ref(db, `market/players/${playerId}`), {
+  await update(ref(db, `rooms/${roomCode}/market/players/${playerId}`), {
     name: nameInput.value.trim(),
     joined: true,
   });
@@ -1115,7 +1173,7 @@ window._submitTrade = async function(playerId) {
   }
 
   // Get fresh state
-  const snap = await get(ref(db, "market"));
+  const snap = await get(marketRef());
   const state = snap.val();
   if (!state || !state.players) { showMsg("❌ Market belum aktif", false); return; }
 
@@ -1154,14 +1212,14 @@ window._submitTrade = async function(playerId) {
   const pendingKey = `${buyerId}_${sellerId}`;
 
   // Save my submission as pending
-  await update(ref(db, `market/pending/${pendingKey}/${playerId}`), {
+  await update(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), {
     partnerId: partnerRaw,
     price: priceRaw,
     time: Date.now()
   });
 
   // Check if partner already submitted
-  const pendingSnap = await get(ref(db, `market/pending/${pendingKey}/${partnerRaw}`));
+  const pendingSnap = await get(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${partnerRaw}`));
   const partnerPending = pendingSnap.val();
 
   if (!partnerPending) {
@@ -1174,24 +1232,24 @@ window._submitTrade = async function(playerId) {
   if (partnerPending.price !== priceRaw) {
     showMsg(`❌ Harga tidak cocok! Kamu: ${fmt(priceRaw)}, ${partnerRaw}: ${fmt(partnerPending.price)}. Nego ulang dan pastikan harga SAMA persis.`, false);
     // Hapus pending saya supaya bisa re-submit
-    await set(ref(db, `market/pending/${pendingKey}/${playerId}`), null);
+    await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), null);
     return;
   }
 
   // Partner ID cross-check
   if (partnerPending.partnerId !== playerId) {
     showMsg(`❌ ${partnerRaw} tidak memilih kamu sebagai partner.`, false);
-    await set(ref(db, `market/pending/${pendingKey}/${playerId}`), null);
+    await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), null);
     return;
   }
 
   // === MATCH! Harga sama, partner sama — finalize trade ===
-  await update(ref(db, `market/trades/${pendingKey}`), {
+  await update(ref(db, `rooms/${roomCode}/market/trades/${pendingKey}`), {
     buyerId, sellerId, price: priceRaw, time: Date.now()
   });
 
   // Clean up pending
-  await set(ref(db, `market/pending/${pendingKey}`), null);
+  await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}`), null);
 
   showMsg("✅ Transaksi berhasil! Kedua pihak setuju.", true);
 };
