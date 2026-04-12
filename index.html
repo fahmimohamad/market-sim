@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Market Simulator — Supply & Demand</title>
+<title>Market Simulator Session 7 — Tax & DWL</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 
@@ -79,16 +79,6 @@
   }
   .shock-btn:active { opacity: 0.7; }
 
-  .radio-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
-  .radio-opt {
-    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
-    background: var(--bg2); border-radius: 8px; border: 2px solid var(--border);
-    cursor: pointer; transition: border-color 0.2s;
-  }
-  .radio-opt.active { border-color: var(--cyan); background: #1a2f50; }
-  .radio-opt input { accent-color: var(--cyan); flex-shrink: 0; }
-  .radio-opt span { flex: 1; }
-
   .waiting-pulse {
     animation: pulse 2s ease-in-out infinite;
   }
@@ -100,18 +90,13 @@
     background: var(--purple-bg); color: var(--purple); margin: 2px;
   }
 
-  .hidden { display: none; }
-
-  /* SVG chart */
   .chart-wrap { margin: 12px 0; }
   .chart-wrap svg { width: 100%; border-radius: 12px; }
 
-  /* Setup form custom inputs */
   .setup-field { margin-bottom: 10px; }
   .setup-field label { display: block; color: var(--label); font-size: 12px; margin-bottom: 4px; }
   .setup-field input { font-family: 'JetBrains Mono', monospace; }
 
-  /* Scrollable trade log */
   .trade-log { max-height: 200px; overflow-y: auto; margin-top: 8px; }
 
   .loading-screen {
@@ -126,75 +111,26 @@
   }
   .config-notice h2 { color: var(--red); font-size: 18px; margin-bottom: 12px; }
   .config-notice p { color: var(--label); font-size: 13px; line-height: 1.6; margin-bottom: 8px; }
-  .config-notice code {
-    display: block; background: var(--bg3); padding: 12px; border-radius: 6px;
-    font-size: 12px; color: var(--yellow); margin: 12px 0; text-align: left;
-    word-break: break-all; font-family: 'JetBrains Mono', monospace;
+
+  /* DWL Table */
+  .dwl-table {
+    width: 100%; font-size: 12px; border-collapse: collapse;
   }
+  .dwl-table tr { border-bottom: 1px solid var(--border); }
+  .dwl-table td { padding: 8px 10px; }
+  .dwl-table tr:nth-child(odd) { background: var(--bg3); }
+  .dwl-table .dwl-row { background: var(--red-bg); border: 2px solid var(--red); font-weight: 700; }
+  .dwl-table .label-col { color: var(--label); }
+  .dwl-table .value-col { text-align: right; color: var(--yellow); font-weight: 700; font-family: 'JetBrains Mono', monospace; }
 </style>
 </head>
 <body>
 
-<!-- ============================================================
-  INSTRUKSI SETUP FIREBASE (5 menit):
-  
-  1. Buka https://console.firebase.google.com
-  2. Klik "Create a project" → beri nama (misal: "market-sim") → Continue
-  3. Disable Google Analytics (tidak perlu) → Create Project
-  4. Di sidebar kiri, klik "Build" → "Realtime Database"
-  5. Klik "Create Database" → pilih region → Start in TEST MODE → Enable
-  6. Di sidebar kiri, klik gear icon → "Project settings"
-  7. Scroll ke "Your apps" → klik ikon Web (</>) 
-  8. Beri nama (misal: "market") → Register app
-  9. Copy config object → paste di bawah (ganti FIREBASE_CONFIG)
-  
-  10. PENTING: Set security rules di Realtime Database → Rules:
-      {
-        "rules": {
-          "rooms": {
-            "$roomId": {
-              ".read": true,
-              "market": {
-                ".write": true,
-                "players": {
-                  "$playerId": {
-                    "name": { ".write": true },
-                    "joined": { ".write": true }
-                  }
-                },
-                "pending": { ".write": true },
-                "trades": { ".write": true }
-              },
-              "teacherHash": { ".write": true, ".read": true }
-            }
-          }
-        }
-      }
-      
-      CATATAN: Rules di atas membatasi write hanya ke path tertentu.
-      Kalau terlalu ribet, pakai rules simpel ini (kurang aman tapi fungsional):
-      {
-        "rules": {
-          ".read": true,
-          ".write": true
-        }
-      }
-
-  11. Host file ini di GitHub Pages atau buka langsung di browser.
-      Untuk GitHub Pages:
-      - Buat repo baru di github.com
-      - Upload file ini sebagai index.html
-      - Settings → Pages → Source: main branch → Save
-      - Tunggu 1-2 menit, link akan muncul
-  
-  12. Share link ke mahasiswa. Selesai!
-============================================================ -->
-
 <script type="module">
 
-// ╔══════════════════════════════════════════════════════════╗
-// ║  GANTI CONFIG INI DENGAN FIREBASE CONFIG KAMU           ║
-// ╚══════════════════════════════════════════════════════════╝
+// ════════════════════════════════════════════════════════════════
+// FIREBASE CONFIG - GANTI DENGAN CONFIG KAMU
+// ════════════════════════════════════════════════════════════════
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyAIOpUIeuSAifPPJtSQ9DqhmljdqZuyzFU",
   authDomain: "market-sim-unpad.firebaseapp.com",
@@ -205,26 +141,20 @@ const FIREBASE_CONFIG = {
   appId: "1:930140198622:web:948da76e024ffa6b17944f"
 };
 
-// ─── Firebase imports ───
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, onValue, update } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-database.js";
 
-// ─── Check config ───
 const isConfigured = FIREBASE_CONFIG.apiKey !== "PASTE_YOUR_API_KEY";
 
-// ─── Globals ───
 let db = null;
-let currentRole = null; // "teacher" | "B01" | "S14" etc
+let currentRole = null;
 let marketState = null;
 let unsubscribe = null;
 let timerInterval = null;
-let roomCode = null; // Room code for multi-class support
+let roomCode = null;
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
 const fmt = (v) => new Intl.NumberFormat("id-ID").format(v);
 
-// Helper: Firebase path for current room
 function roomRef(path) {
   return ref(db, `rooms/${roomCode}/${path || ""}`);
 }
@@ -245,9 +175,7 @@ function getTimeRemaining(state) {
   return state.deadline - Date.now();
 }
 
-// Start a 1-second timer that updates countdown display and auto-closes
 function startTimer() {
-  // Only start one timer
   if (timerInterval) return;
   timerInterval = setInterval(async () => {
     const el = document.getElementById("countdown-display");
@@ -261,7 +189,6 @@ function startTimer() {
       el.style.color = remaining <= 30000 ? "var(--red)" : remaining <= 60000 ? "var(--yellow)" : "var(--cyan)";
       el.style.animation = remaining <= 30000 ? "pulse 1s ease-in-out infinite" : "none";
     }
-    // Auto-close for teacher
     if (remaining <= 0 && currentRole === "teacher") {
       clearInterval(timerInterval);
       timerInterval = null;
@@ -270,201 +197,98 @@ function startTimer() {
   }, 500);
 }
 
-// ─── Scenarios ───
-const SCENARIOS = {
-  minyak: { label: "Minyak Goreng", sub: "1 liter", emoji: "🫗", buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000, unit: "Rp", good: "Minyak Goreng" },
-  beras: { label: "Beras", sub: "1 kg", emoji: "🍚", buyerMin: 8000, buyerMax: 18000, sellerMin: 6000, sellerMax: 15000, unit: "Rp", good: "Beras" },
-  buku: { label: "Buku Bekas", sub: "Mikroekonomi", emoji: "📕", buyerMin: 20000, buyerMax: 80000, sellerMin: 15000, sellerMax: 70000, unit: "Rp", good: "Buku Bekas" },
-  cabai: { label: "Cabai Merah", sub: "1 kg", emoji: "🌶️", buyerMin: 20000, buyerMax: 60000, sellerMin: 15000, sellerMax: 50000, unit: "Rp", good: "Cabai" },
-};
+// ════════════════════════════════════════════════════════════════
+// FIXED SUPPLY-DEMAND SCHEDULE (Session 7: Beras)
+// ════════════════════════════════════════════════════════════════
+// Sengaja fixed supaya equilibrium predictable untuk analisis tax & DWL
 
-// ─── Init ───
-function init() {
-  if (!isConfigured) {
-    document.getElementById("app").innerHTML = `
-      <div class="config-notice">
-        <h2>⚠️ Firebase Belum Dikonfigurasi</h2>
-        <p>Buka file HTML ini dengan text editor, lalu ganti <strong>FIREBASE_CONFIG</strong> dengan config dari Firebase Console kamu.</p>
-        <code>const FIREBASE_CONFIG = {<br>&nbsp;&nbsp;apiKey: "AIza...",<br>&nbsp;&nbsp;authDomain: "your-project.firebaseapp.com",<br>&nbsp;&nbsp;databaseURL: "https://your-project-default-rtdb...",<br>&nbsp;&nbsp;...<br>};</code>
-        <p>Lihat instruksi lengkap di dalam komentar HTML file ini.</p>
-      </div>`;
-    return;
+const FIXED_DEMAND_WTP = [18000, 16000, 14000, 12000, 10000, 8000];
+const FIXED_SUPPLY_WTA = [6000, 8000, 10000, 12000, 14000, 16000];
+
+function getFixedSchedule(numBuyers, numSellers) {
+  const buyerWTPs = [];
+  for (let i = 0; i < numBuyers; i++) {
+    buyerWTPs.push(FIXED_DEMAND_WTP[i % FIXED_DEMAND_WTP.length]);
   }
-
-  const app = initializeApp(FIREBASE_CONFIG);
-  db = getDatabase(app);
-  showRoleSelect();
+  const sellerWTAs = [];
+  for (let i = 0; i < numSellers; i++) {
+    sellerWTAs.push(FIXED_SUPPLY_WTA[i % FIXED_SUPPLY_WTA.length]);
+  }
+  return { buyerWTPs, sellerWTAs };
 }
 
-// ─── ROOM SELECT SCREEN ───
-function showRoleSelect() {
-  if (unsubscribe) unsubscribe();
-  roomCode = null;
-  currentRole = null;
-  timerInterval && clearInterval(timerInterval);
-  timerInterval = null;
+// ════════════════════════════════════════════════════════════════
+// DWL CALCULATION FUNCTION
+// ════════════════════════════════════════════════════════════════
 
-  document.getElementById("app").innerHTML = `
-    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
-      <div style="width:100%;max-width:400px;">
-        <div class="text-center mb-16">
-          <div style="font-size:48px;margin-bottom:8px;">📊</div>
-          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
-          <p style="color:var(--muted);font-size:14px;">Supply & Demand — Interactive</p>
-        </div>
+function calculateDWL(state) {
+  if (!state || !state.players) return null;
 
-        <div class="card mb-12">
-          <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Kode Kelas / Room</div>
-          <input id="room-code-input" placeholder="Contoh: MIKRO-A" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-size:18px;text-align:center;"
-            onkeydown="if(event.key==='Enter')window._enterRoom()">
-          <div style="color:var(--muted);font-size:11px;margin-top:6px;">Minta kode kelas ke dosen. Dosen: buat kode sendiri (bebas).</div>
-        </div>
-        <button class="btn btn-cyan mb-16" onclick="window._enterRoom()">Masuk Room →</button>
-        <div id="room-msg"></div>
-      </div>
-    </div>`;
-}
+  const players = Object.values(state.players);
+  const buyers = players.filter(p => p.role === "buyer").sort((a, b) => b.valuation - a.valuation);
+  const sellers = players.filter(p => p.role === "seller").sort((a, b) => a.valuation - b.valuation);
+  const trades = getTradesArray(state);
 
-window._enterRoom = function() {
-  const code = document.getElementById("room-code-input")?.value?.toUpperCase()?.trim()?.replace(/[^A-Z0-9\-]/g, "");
-  if (!code || code.length < 2) {
-    document.getElementById("room-msg").innerHTML = '<div class="msg msg-err">❌ Masukkan kode kelas (min 2 karakter)</div>';
-    return;
+  // Compute baseline equilibrium (tanpa pajak/ceiling)
+  let eqQ = 0, eqP = 0;
+  for (let i = 0; i < Math.min(buyers.length, sellers.length); i++) {
+    if (buyers[i].valuation >= sellers[i].valuation) {
+      eqQ = i + 1;
+      eqP = (sellers[i].valuation + buyers[i].valuation) / 2;
+    } else break;
   }
-  roomCode = code;
-  showRoomRoleSelect();
-};
 
-// ─── ROLE SELECT INSIDE ROOM ───
-function showRoomRoleSelect() {
-  if (unsubscribe) unsubscribe();
+  if (eqQ === 0) {
+    return {
+      eqPrice: 0, eqQuantity: 0, csBaseline: 0, psBaseline: 0,
+      totalSurplusBaseline: 0, csActual: 0, psActual: 0,
+      totalSurplusActual: 0, dwl: 0, numTrades: 0, lostTrades: 0
+    };
+  }
 
-  document.getElementById("app").innerHTML = `
-    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
-      <div style="width:100%;max-width:400px;">
-        <div class="text-center mb-16">
-          <div style="font-size:48px;margin-bottom:8px;">📊</div>
-          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
-          <div style="margin-top:6px;"><span class="badge" style="background:var(--cyan-bg);color:var(--cyan);font-size:14px;padding:6px 16px;">Room: ${roomCode}</span></div>
-        </div>
+  // Consumer Surplus baseline
+  let csBaseline = 0;
+  for (let i = 0; i < eqQ; i++) csBaseline += buyers[i].valuation - eqP;
 
-        <button class="btn btn-yellow mb-12" onclick="window._showTeacherLogin()">
-          👨‍🏫 Saya Dosen
-        </button>
+  // Producer Surplus baseline
+  let psBaseline = 0;
+  for (let i = 0; i < eqQ; i++) psBaseline += eqP - sellers[i].valuation;
 
-        <div id="teacher-login" style="display:none;" class="mb-12">
-          <div class="card">
-            <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Password Dosen</div>
-            <div style="display:flex;gap:8px;">
-              <input id="teacher-pw" type="password" placeholder="Masukkan password" style="flex:1;"
-                onkeydown="if(event.key==='Enter')window._checkTeacherPw()">
-              <button class="btn btn-yellow" style="width:auto;padding:10px 16px;font-size:14px;" onclick="window._checkTeacherPw()">OK</button>
-            </div>
-            <div id="pw-msg" style="margin-top:6px;"></div>
-          </div>
-        </div>
+  const totalSurplusBaseline = csBaseline + psBaseline;
 
-        <div class="text-center" style="color:var(--border);font-size:13px;margin:12px 0;">— atau —</div>
-
-        <div style="display:flex;gap:8px;">
-          <input id="role-id-input" placeholder="ID kamu (contoh: B05, S12)" 
-            style="flex:1;text-transform:uppercase;font-family:'JetBrains Mono',monospace;" 
-            onkeydown="if(event.key==='Enter')window._selectRole(this.value.toUpperCase().trim())">
-          <button class="btn btn-cyan" style="width:auto;padding:12px 20px;" 
-            onclick="window._selectRole(document.getElementById('role-id-input').value.toUpperCase().trim())">
-            Masuk
-          </button>
-        </div>
-
-        <div id="market-status" class="mt-16 text-center" style="display:none;">
-          <div class="card" style="padding:10px;">
-            <span style="color:var(--cyan);font-size:13px;" id="status-text"></span>
-          </div>
-        </div>
-
-        <button class="btn btn-outline mt-16" onclick="window._backToRoomSelect()" style="font-size:13px;padding:10px;">← Ganti Room</button>
-      </div>
-    </div>`;
-
-  // Listen for market state in this room
-  unsubscribe = onValue(marketRef(), (snap) => {
-    marketState = snap.val();
-    const statusEl = document.getElementById("market-status");
-    const statusText = document.getElementById("status-text");
-    if (statusEl && marketState && marketState.phase && marketState.phase !== "idle") {
-      statusEl.style.display = "block";
-      const joined = countJoined(marketState);
-      statusText.textContent = `🟢 Pasar aktif: ${marketState.good || "?"} — ${joined}/${(marketState.numBuyers||0)+(marketState.numSellers||0)} peserta`;
+  // Actual trades
+  let csActual = 0, psActual = 0;
+  trades.forEach(t => {
+    const buyer = players.find(p => p.id === t.buyerId);
+    const seller = players.find(p => p.id === t.sellerId);
+    if (buyer && seller) {
+      csActual += buyer.valuation - t.price;
+      psActual += t.price - seller.valuation;
     }
   });
+
+  const totalSurplusActual = csActual + psActual;
+  const dwl = totalSurplusBaseline - totalSurplusActual;
+
+  return {
+    eqPrice: Math.round(eqP),
+    eqQuantity: eqQ,
+    csBaseline: Math.round(csBaseline),
+    psBaseline: Math.round(psBaseline),
+    totalSurplusBaseline: Math.round(totalSurplusBaseline),
+    csActual: Math.round(csActual),
+    psActual: Math.round(psActual),
+    totalSurplusActual: Math.round(totalSurplusActual),
+    dwl: Math.round(dwl),
+    numTrades: trades.length,
+    lostTrades: eqQ - trades.length
+  };
 }
 
-window._backToRoomSelect = function() {
-  showRoleSelect();
-};
-
-// ─── Teacher password (hashed with SHA-256) ───
-// Default password: "dosen123"
-// To change: run in browser console: 
-//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('YOUR_NEW_PASSWORD')).then(b => console.log(Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('')))
-// Then replace the hash below.
-const TEACHER_PASSWORD_HASH = "8a4a5e3c4f2a1b7d9e0f3c6a8b2d4e6f1a3c5e7b9d0f2a4c6e8b0d2f4a6c8e"; // placeholder, will be set on first use
-
-async function hashPassword(pw) {
-  const data = new TextEncoder().encode(pw);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer)).map(x => x.toString(16).padStart(2, '0')).join('');
-}
-
-// Store the hash of "dosen123" - computed at init
-let teacherHash = null;
-(async () => { teacherHash = await hashPassword("dosen123"); })();
-
-window._showTeacherLogin = function() {
-  const el = document.getElementById("teacher-login");
-  if (el) el.style.display = el.style.display === "none" ? "block" : "none";
-};
-
-window._checkTeacherPw = async function() {
-  const pw = document.getElementById("teacher-pw")?.value;
-  const msgEl = document.getElementById("pw-msg");
-  if (!pw) return;
-  
-  // Also check against room-specific password if set
-  let roomPwHash = null;
-  if (roomCode && db) {
-    try {
-      const snap = await get(ref(db, `rooms/${roomCode}/teacherHash`));
-      roomPwHash = snap.val();
-    } catch(e) {}
-  }
-
-  const inputHash = await hashPassword(pw);
-  
-  if (inputHash === teacherHash || (roomPwHash && inputHash === roomPwHash)) {
-    window._selectRole("teacher");
-  } else {
-    if (msgEl) msgEl.innerHTML = '<div class="msg msg-err" style="margin-top:6px;padding:6px 10px;font-size:12px;">❌ Password salah</div>';
-  }
-};
-
-window._selectRole = function(role) {
-  if (!role) return;
-  currentRole = role;
-  if (role === "teacher") {
-    showTeacher();
-  } else {
-    showStudent(role);
-  }
-};
-
-// ─── HELPERS ───
 function countJoined(state) {
   if (!state || !state.players) return 0;
   return Object.values(state.players).filter(p => p.joined).length;
 }
-
-function rng(min, max) { return Math.round(min + Math.random() * (max - min)); }
 
 function computeEquilibrium(state) {
   if (!state || !state.players) return { price: 0, quantity: 0 };
@@ -487,7 +311,6 @@ function getTradesArray(state) {
   return Object.values(state.trades).sort((a, b) => a.time - b.time);
 }
 
-// ─── SVG CHART ───
 function renderChart(state) {
   if (!state || !state.players) return '<div class="card text-center" style="color:var(--muted);padding:30px;">Belum ada data</div>';
 
@@ -511,43 +334,55 @@ function renderChart(state) {
   const xS = (q) => pad.left + (q / maxQ) * w;
   const yS = (p) => pad.top + h - ((p - minP) / (maxP - minP)) * h;
 
-  // Demand path
   const dPath = buyers.map((b, i) => `${i === 0 ? "M" : "L"}${xS(i + 1).toFixed(1)},${yS(b.valuation).toFixed(1)}`).join(" ");
-  // Supply path
   const sPath = sellers.map((s, i) => `${i === 0 ? "M" : "L"}${xS(i + 1).toFixed(1)},${yS(s.valuation).toFixed(1)}`).join(" ");
 
-  // Y ticks
   const numT = 5;
   const step = (maxP - minP) / numT;
   const yTicks = Array.from({ length: numT + 1 }, (_, i) => Math.round(minP + i * step));
 
-  // X ticks
   const xTicks = [];
   for (let i = 1; i <= maxQ; i++) { if (i % 5 === 0 || i === 1) xTicks.push(i); }
 
-  // Trades dots
   const tradeDots = trades.map((t, i) =>
     `<circle cx="${xS(i + 1).toFixed(1)}" cy="${yS(t.price).toFixed(1)}" r="5" fill="var(--purple)" stroke="var(--bg3)" stroke-width="1.5" opacity="0.9"><animate attributeName="r" from="9" to="5" dur="0.4s" fill="freeze"/></circle>`
   ).join("");
 
-  // Equilibrium lines
+  // DWL visualization (area yang hilang karena tax/shock)
+  let dwlAreaSvg = "";
+  const dwlData = calculateDWL(state);
+  if (dwlData && dwlData.lostTrades > 0 && eq.quantity > 0) {
+    const actualQ = trades.length;
+    if (actualQ < eq.quantity) {
+      const x1 = xS(actualQ + 1);
+      const x2 = xS(eq.quantity);
+      const y_eq = yS(eq.price);
+      const y_top = yS(buyers[eq.quantity - 1]?.valuation || 0);
+      const y_bottom = yS(sellers[eq.quantity - 1]?.valuation || 0);
+      
+      dwlAreaSvg = `
+        <polygon points="${x1},${y_top} ${x2},${y_top} ${x2},${y_eq} ${x1},${y_eq}" fill="var(--red)" opacity="0.15" stroke="var(--red)" stroke-width="1.5" stroke-dasharray="4,2"/>
+        <path d="M ${x1} ${y_eq} L ${x2} ${y_eq}" stroke="var(--red)" stroke-width="2" stroke-dasharray="6,4"/>
+      `;
+    }
+  }
+
   let eqSvg = "";
   if (eq.quantity > 0) {
     eqSvg = `
       <line x1="${xS(eq.quantity)}" x2="${xS(eq.quantity)}" y1="${yS(eq.price)}" y2="${pad.top + h}" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="6,4"/>
       <line x1="${pad.left}" x2="${xS(eq.quantity)}" y1="${yS(eq.price)}" y2="${yS(eq.price)}" stroke="var(--yellow)" stroke-width="1.5" stroke-dasharray="6,4"/>
       <circle cx="${xS(eq.quantity)}" cy="${yS(eq.price)}" r="6" fill="var(--yellow)" stroke="var(--bg3)" stroke-width="2"/>
-      <text x="${xS(eq.quantity) + 10}" y="${yS(eq.price) - 8}" fill="var(--yellow)" font-size="11" font-weight="700" font-family="JetBrains Mono,monospace">E: ${fmt(eq.price)} × ${eq.quantity}</text>
+      <text x="${xS(eq.quantity) + 10}" y="${yS(eq.price) - 8}" fill="var(--yellow)" font-size="11" font-weight="700" font-family="JetBrains Mono,monospace">E*: ${fmt(eq.price)} × ${eq.quantity}</text>
     `;
   }
 
-  // Price ceiling line
   let ceilingSvg = "";
   if (state.priceCeiling) {
     const cy = yS(state.priceCeiling);
     ceilingSvg = `
       <line x1="${pad.left}" x2="${W - pad.right}" y1="${cy}" y2="${cy}" stroke="var(--red)" stroke-width="2" stroke-dasharray="8,4"/>
-      <text x="${W - pad.right - 4}" y="${cy - 6}" fill="var(--red)" font-size="10" font-weight="700" text-anchor="end" font-family="JetBrains Mono,monospace">HET ${fmt(state.priceCeiling)}</text>
+      <text x="${W - pad.right - 4}" y="${cy - 6}" fill="var(--red)" font-size="10" font-weight="700" text-anchor="end" font-family="JetBrains Mono,monospace">HET</text>
     `;
   }
 
@@ -559,28 +394,165 @@ function renderChart(state) {
       ${yTicks.map(t => `<text x="${pad.left - 8}" y="${yS(t) + 4}" text-anchor="end" fill="var(--label)" font-size="10" font-family="JetBrains Mono,monospace">${fmt(t)}</text>`).join("")}
       ${xTicks.map(t => `<text x="${xS(t)}" y="${pad.top + h + 18}" text-anchor="middle" fill="var(--label)" font-size="10" font-family="JetBrains Mono,monospace">${t}</text>`).join("")}
       <text x="${W / 2}" y="${H - 4}" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="600">Quantity</text>
-      <text x="14" y="${H / 2}" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="600" transform="rotate(-90,14,${H / 2})">Price (${state.unit || "Rp"})</text>
+      <text x="14" y="${H / 2}" text-anchor="middle" fill="var(--label)" font-size="11" font-weight="600" transform="rotate(-90,14,${H / 2})">Price (Rp)</text>
       <path d="${dPath}" fill="none" stroke="var(--cyan)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       <text x="${xS(buyers.length) + 6}" y="${yS(buyers[buyers.length - 1]?.valuation || 0)}" fill="var(--cyan)" font-size="12" font-weight="700">D</text>
       <path d="${sPath}" fill="none" stroke="var(--red)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
       <text x="${xS(sellers.length) + 6}" y="${yS(sellers[sellers.length - 1]?.valuation || 0)}" fill="var(--red)" font-size="12" font-weight="700">S</text>
+      ${dwlAreaSvg}
       ${eqSvg}
       ${ceilingSvg}
       ${tradeDots}
-      <rect x="${W - 165}" y="6" width="155" height="68" rx="6" fill="var(--bg2)" stroke="var(--border)" stroke-width="0.5"/>
-      <circle cx="${W - 148}" cy="22" r="4" fill="var(--cyan)"/><text x="${W - 138}" y="26" fill="#ccc" font-size="9">Demand (WTP)</text>
-      <circle cx="${W - 148}" cy="38" r="4" fill="var(--red)"/><text x="${W - 138}" y="42" fill="#ccc" font-size="9">Supply (WTA)</text>
-      <circle cx="${W - 148}" cy="54" r="4" fill="var(--yellow)"/><text x="${W - 138}" y="58" fill="#ccc" font-size="9">Equilibrium</text>
-      <circle cx="${W - 148}" cy="70" r="4" fill="var(--purple)"/><text x="${W - 138}" y="74" fill="#ccc" font-size="9">Transaksi aktual</text>
     </svg>
   </div>`;
 }
 
-// ─── TEACHER VIEW ───
+function init() {
+  if (!isConfigured) {
+    document.getElementById("app").innerHTML = `
+      <div class="config-notice">
+        <h2>⚠️ Firebase Belum Dikonfigurasi</h2>
+        <p>Update FIREBASE_CONFIG di dalam script ini.</p>
+      </div>`;
+    return;
+  }
+
+  const app = initializeApp(FIREBASE_CONFIG);
+  db = getDatabase(app);
+  showRoleSelect();
+}
+
+function showRoleSelect() {
+  if (unsubscribe) unsubscribe();
+  roomCode = null;
+  currentRole = null;
+  timerInterval && clearInterval(timerInterval);
+  timerInterval = null;
+
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
+      <div style="width:100%;max-width:400px;">
+        <div class="text-center mb-16">
+          <div style="font-size:48px;margin-bottom:8px;">📊</div>
+          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
+          <p style="color:var(--muted);font-size:14px;">Session 7: Tax Incidence & DWL</p>
+        </div>
+
+        <div class="card mb-12">
+          <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Kode Kelas</div>
+          <input id="room-code-input" placeholder="Contoh: MIKRO-7" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;font-size:18px;text-align:center;"
+            onkeydown="if(event.key==='Enter')window._enterRoom()">
+        </div>
+        <button class="btn btn-cyan mb-16" onclick="window._enterRoom()">Masuk →</button>
+        <div id="room-msg"></div>
+      </div>
+    </div>`;
+}
+
+window._enterRoom = function() {
+  const code = document.getElementById("room-code-input")?.value?.toUpperCase()?.trim()?.replace(/[^A-Z0-9\-]/g, "");
+  if (!code || code.length < 2) {
+    document.getElementById("room-msg").innerHTML = '<div class="msg msg-err">Masukkan kode kelas</div>';
+    return;
+  }
+  roomCode = code;
+  showRoomRoleSelect();
+};
+
+function showRoomRoleSelect() {
+  if (unsubscribe) unsubscribe();
+
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="display:flex;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;">
+      <div style="width:100%;max-width:400px;">
+        <div class="text-center mb-16">
+          <div style="font-size:48px;margin-bottom:8px;">📊</div>
+          <h1 style="font-size:22px;color:var(--text);margin-bottom:4px;">Market Simulator</h1>
+          <div style="margin-top:6px;"><span class="badge" style="background:var(--cyan-bg);color:var(--cyan);font-size:14px;padding:6px 16px;">Room: ${roomCode}</span></div>
+        </div>
+
+        <button class="btn btn-yellow mb-12" onclick="window._showTeacherLogin()">👨‍🏫 Saya Dosen</button>
+
+        <div id="teacher-login" style="display:none;" class="mb-12">
+          <div class="card">
+            <div style="color:var(--label);font-size:12px;margin-bottom:6px;">Password Dosen</div>
+            <div style="display:flex;gap:8px;">
+              <input id="teacher-pw" type="password" placeholder="Masukkan password" style="flex:1;"
+                onkeydown="if(event.key==='Enter')window._checkTeacherPw()">
+              <button class="btn btn-yellow" style="width:auto;padding:10px 16px;font-size:14px;" onclick="window._checkTeacherPw()">OK</button>
+            </div>
+            <div id="pw-msg" style="margin-top:6px;"></div>
+          </div>
+        </div>
+
+        <div class="text-center" style="color:var(--border);font-size:13px;margin:12px 0;">— atau —</div>
+
+        <div style="display:flex;gap:8px;">
+          <input id="role-id-input" placeholder="ID kamu (B01, S01)" 
+            style="flex:1;text-transform:uppercase;font-family:'JetBrains Mono',monospace;" 
+            onkeydown="if(event.key==='Enter')window._selectRole(this.value.toUpperCase().trim())">
+          <button class="btn btn-cyan" style="width:auto;padding:12px 20px;" 
+            onclick="window._selectRole(document.getElementById('role-id-input').value.toUpperCase().trim())">Masuk</button>
+        </div>
+
+        <button class="btn btn-outline mt-16" onclick="window._backToRoomSelect()" style="font-size:13px;padding:10px;">← Ganti Room</button>
+      </div>
+    </div>`;
+
+  unsubscribe = onValue(marketRef(), (snap) => {
+    marketState = snap.val();
+  });
+}
+
+window._backToRoomSelect = function() {
+  showRoleSelect();
+};
+
+let teacherHash = null;
+(async () => {
+  const data = new TextEncoder().encode("dosen123");
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  teacherHash = Array.from(new Uint8Array(hashBuffer)).map(x => x.toString(16).padStart(2, '0')).join('');
+})();
+
+window._showTeacherLogin = function() {
+  const el = document.getElementById("teacher-login");
+  if (el) el.style.display = el.style.display === "none" ? "block" : "none";
+};
+
+window._checkTeacherPw = async function() {
+  const pw = document.getElementById("teacher-pw")?.value;
+  const msgEl = document.getElementById("pw-msg");
+  if (!pw) return;
+
+  const data = new TextEncoder().encode(pw);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const inputHash = Array.from(new Uint8Array(hashBuffer)).map(x => x.toString(16).padStart(2, '0')).join('');
+
+  if (inputHash === teacherHash) {
+    window._selectRole("teacher");
+  } else {
+    if (msgEl) msgEl.innerHTML = '<div class="msg msg-err" style="margin-top:6px;padding:6px 10px;font-size:12px;">Password salah</div>';
+  }
+};
+
+window._selectRole = function(role) {
+  if (!role) return;
+  currentRole = role;
+  if (role === "teacher") {
+    showTeacher();
+  } else {
+    showStudent(role);
+  }
+};
+
+// ════════════════════════════════════════════════════════════════
+// TEACHER VIEW
+// ════════════════════════════════════════════════════════════════
+
 function showTeacher() {
   if (unsubscribe) unsubscribe();
 
-  // Listen to market state
   unsubscribe = onValue(marketRef(), (snap) => {
     marketState = snap.val();
     renderTeacherUI();
@@ -596,7 +568,6 @@ function renderTeacherUI() {
     return;
   }
 
-  // === FINAL LEADERBOARD ===
   if (state.phase === "final") {
     renderFinalLeaderboard(state);
     return;
@@ -621,7 +592,7 @@ function renderTeacherUI() {
     <div class="container">
       <div style="display:flex;justify-content:space-between;align-items:center;" class="mb-12">
         <div>
-          <h2 style="color:var(--yellow);font-size:18px;">📊 ${state.good || "?"} — Round ${state.round || 1}/${state.totalRounds || "?"}</h2>
+          <h2 style="color:var(--yellow);font-size:18px;">📊 Beras — Round ${state.round || 1}/${state.totalRounds || "?"}</h2>
           <div style="display:flex;gap:6px;align-items:center;margin-top:4px;">
             <span class="badge" style="background:${phaseBg};color:${phaseColor};">${phaseLabel}</span>
             <span class="badge" style="background:var(--cyan-bg);color:var(--cyan);">${roomCode}</span>
@@ -638,24 +609,13 @@ function renderTeacherUI() {
       <div class="grid-2 mb-12">
         <div class="card text-center">
           <div class="stat-num" style="color:var(--cyan);">${joinedB}/${state.numBuyers || "?"}</div>
-          <div class="stat-label">Buyers joined</div>
+          <div class="stat-label">Buyers</div>
         </div>
         <div class="card text-center">
           <div class="stat-num" style="color:var(--red);">${joinedS}/${state.numSellers || "?"}</div>
-          <div class="stat-label">Sellers joined</div>
+          <div class="stat-label">Sellers</div>
         </div>
       </div>
-
-      ${(() => {
-        const notJoined = players.filter(p => !p.joined);
-        if (notJoined.length === 0) return "";
-        return `<div class="card mb-12" style="padding:10px 14px;">
-          <div style="color:var(--label);font-size:11px;margin-bottom:6px;">⚠️ Belum join (${notJoined.length}):</div>
-          <div style="display:flex;flex-wrap:wrap;gap:4px;">
-            ${notJoined.map(p => `<span style="padding:2px 8px;border-radius:4px;font-size:12px;font-family:'JetBrains Mono',monospace;background:${p.role === "buyer" ? "var(--cyan-bg)" : "var(--red-bg)"};color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};">${p.id}</span>`).join("")}
-          </div>
-        </div>`;
-      })()}
 
       ${renderChart(state)}
 
@@ -663,11 +623,11 @@ function renderTeacherUI() {
         <div class="grid-3 mt-12">
           <div class="card text-center">
             <div class="stat-num" style="color:var(--yellow);">${fmt(eq.price)}</div>
-            <div class="stat-label">P* (Teori)</div>
+            <div class="stat-label">P* Teori</div>
           </div>
           <div class="card text-center">
             <div class="stat-num" style="color:var(--yellow);">${eq.quantity}</div>
-            <div class="stat-label">Q* (Teori)</div>
+            <div class="stat-label">Q* Teori</div>
           </div>
           <div class="card text-center">
             <div class="stat-num" style="color:var(--purple);">${trades.length}</div>
@@ -678,126 +638,106 @@ function renderTeacherUI() {
 
       ${trades.length > 0 ? `
         <div class="card mt-12">
-          <div style="color:var(--label);font-size:12px;" class="mb-8">Harga Transaksi Aktual</div>
+          <div style="color:var(--label);font-size:12px;" class="mb-8">Harga Actual (${trades.length}x)</div>
           <div style="display:flex;flex-wrap:wrap;gap:4px;">
             ${trades.map(t => `<span class="chip">${fmt(t.price)}</span>`).join("")}
           </div>
           <div style="margin-top:8px;color:var(--label);font-size:12px;">
             Rata-rata: <strong style="color:var(--purple);">${fmt(tradeAvg)}</strong>
-            ${eq ? ` vs P* teori: <strong style="color:var(--yellow);">${fmt(eq.price)}</strong>` : ""}
+            ${eq ? ` vs P*: <strong style="color:var(--yellow);">${fmt(eq.price)}</strong>` : ""}
           </div>
         </div>
       ` : ""}
 
-      ${state.priceCeiling ? `<div class="msg msg-err mt-12">⛔ HET aktif: transaksi di atas ${fmt(state.priceCeiling)} tidak diperbolehkan</div>` : ""}
-      ${state.tax ? `<div class="msg mt-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak aktif: Rp${fmt(state.tax)} per unit. WTA seller sudah dinaikkan sebesar pajak.</div>` : ""}
+      ${(() => {
+        const dwl = calculateDWL(state);
+        if (!dwl || state.phase !== "results") return "";
+        return `
+          <div class="card mt-16">
+            <div style="color:var(--yellow);font-size:13px;font-weight:600;margin-bottom:12px;">📊 DWL Analysis — Round ${state.round || 1}</div>
+            <table class="dwl-table">
+              <tr style="border-bottom:2px solid var(--border);">
+                <td class="label-col"><strong>Metric</strong></td>
+                <td class="value-col"><strong>Rp</strong></td>
+              </tr>
+              <tr>
+                <td class="label-col">Consumer Surplus (baseline)</td>
+                <td class="value-col">${fmt(dwl.csBaseline)}</td>
+              </tr>
+              <tr>
+                <td class="label-col">Producer Surplus (baseline)</td>
+                <td class="value-col">${fmt(dwl.psBaseline)}</td>
+              </tr>
+              <tr style="background:var(--yellow-bg);border:1px solid var(--yellow);font-weight:700;">
+                <td class="label-col">Total Surplus (baseline)</td>
+                <td class="value-col" style="color:var(--yellow);">${fmt(dwl.csBaseline + dwl.psBaseline)}</td>
+              </tr>
+              <tr style="border-top:2px solid var(--border);border-bottom:1px solid var(--border);">
+                <td class="label-col" style="color:var(--muted);font-size:11px;">Transaksi aktual</td>
+                <td class="value-col" style="color:var(--muted);font-size:11px;">${dwl.numTrades}/${dwl.eqQuantity}</td>
+              </tr>
+              <tr>
+                <td class="label-col">Consumer Surplus (aktual)</td>
+                <td class="value-col">${fmt(dwl.csActual)}</td>
+              </tr>
+              <tr>
+                <td class="label-col">Producer Surplus (aktual)</td>
+                <td class="value-col">${fmt(dwl.psActual)}</td>
+              </tr>
+              <tr style="background:var(--cyan-bg);border:1px solid var(--cyan);font-weight:700;">
+                <td class="label-col">Total Surplus (aktual)</td>
+                <td class="value-col" style="color:var(--cyan);">${fmt(dwl.totalSurplusActual)}</td>
+              </tr>
+              <tr style="background:var(--red-bg);border:2px solid var(--red);font-weight:700;">
+                <td class="label-col" style="color:var(--red);">⚠️ DEADWEIGHT LOSS</td>
+                <td class="value-col" style="color:var(--red);font-size:16px;">${fmt(dwl.dwl)}</td>
+              </tr>
+            </table>
+            <div style="margin-top:12px;padding:10px;background:var(--red-bg);border-radius:8px;border:1px solid var(--red);">
+              <div style="color:var(--red);font-size:12px;font-weight:600;">🔴 Lost Trades</div>
+              <div style="color:var(--label);font-size:11px;margin-top:4px;">
+                ${dwl.lostTrades} transaksi yang seharusnya terjadi tidak terjadi.
+                <br>Efficiency loss karena ${state.priceCeiling ? "HET (price ceiling)" : state.tax ? "pajak" : "shock"}.
+              </div>
+            </div>
+          </div>
+        `;
+      })()}
+    
+
+      ${state.priceCeiling ? `<div class="msg msg-err mt-12">⛔ HET: ${fmt(state.priceCeiling)}</div>` : ""}
+      ${state.tax ? `<div class="msg mt-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak: Rp${fmt(state.tax)}/unit (seller)</div>` : ""}
 
       <div class="mt-16" style="display:flex;flex-direction:column;gap:8px;">
         ${state.phase === "join" ? `
           <div class="card" style="padding:12px;">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-              <div style="color:var(--label);font-size:12px;white-space:nowrap;">⏱ Waktu trading:</div>
+              <div style="color:var(--label);font-size:12px;">⏱</div>
               <input id="round-time-input" type="number" value="${state.roundMinutes || 5}" min="1" max="30" style="width:70px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--yellow);padding:8px;">
               <div style="color:var(--muted);font-size:12px;">menit</div>
             </div>
             <button class="btn btn-yellow" onclick="window._openTrading()">🔔 Buka Trading</button>
           </div>
         ` : ""}
-        ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup Round ${state.round || 1}</button>` : ""}
+        ${state.phase === "trade" ? `<button class="btn btn-purple" onclick="window._closeTrading()">📊 Tutup Round</button>` : ""}
         ${state.phase === "results" ? `
           <div class="card" style="padding:12px;">
             <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-              <div style="color:var(--label);font-size:12px;white-space:nowrap;">⏱ Waktu round berikutnya:</div>
+              <div style="color:var(--label);font-size:12px;">⏱</div>
               <input id="round-time-input" type="number" value="${state.roundMinutes || 5}" min="1" max="30" style="width:70px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--yellow);padding:8px;">
               <div style="color:var(--muted);font-size:12px;">menit</div>
             </div>
-            <button class="btn btn-cyan" onclick="window._nextRound()">▶️ Mulai Round ${(state.round || 1) + 1}/${state.totalRounds || "?"}</button>
+            <button class="btn btn-cyan" onclick="window._nextRound()">▶️ Round ${(state.round || 1) + 1}</button>
           </div>
         ` : ""}
         ${state.phase === "trade" ? `
-          <div style="color:var(--label);font-size:11px;margin-top:8px;margin-bottom:6px;">⚡ Shock (reset round, valuasi berubah):</div>
+          <div style="color:var(--label);font-size:11px;margin-top:8px;margin-bottom:6px;">⚡ Shock:</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-            <button class="shock-btn" style="border-color:var(--cyan);color:var(--cyan);" onclick="window._applyShock('demand_up')">📈 Demand +30%</button>
-            <button class="shock-btn" style="border-color:#5a9aba;color:#5a9aba;" onclick="window._applyShock('demand_down')">📉 Demand -30%</button>
-            <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_up')">📈 Supply Cost +30%</button>
-            <button class="shock-btn" style="border-color:#ba6a5a;color:#ba6a5a;" onclick="window._applyShock('supply_down')">📉 Supply Cost -30%</button>
-            <button class="shock-btn" style="border-color:var(--yellow);color:var(--yellow);" onclick="window._applyShock('price_ceiling')">⛔ Pasang HET</button>
-            <button class="shock-btn" style="border-color:var(--purple);color:var(--purple);" onclick="window._applyShock('tax')">💰 Pajak per Unit</button>
+            <button class="shock-btn" style="border-color:var(--red);color:var(--red);" onclick="window._applyShock('supply_up')">📈 Supply Pajak</button>
+            <button class="shock-btn" style="border-color:#ba6a5a;color:#ba6a5a;" onclick="window._applyShock('supply_down')">📉 Supply Normal</button>
           </div>
         ` : ""}
       </div>
-
-      ${trades.length > 0 ? `
-        <div class="mt-16">
-          <div style="color:var(--label);font-size:12px;" class="mb-8">📜 Log Transaksi</div>
-          <div class="trade-log">
-            ${trades.slice().reverse().map((t, i) => `
-              <div class="trade-row">
-                <span style="color:var(--cyan);">${t.buyerId}</span>
-                <span style="color:var(--purple);" class="mono">${fmt(t.price)}</span>
-                <span style="color:var(--red);">${t.sellerId}</span>
-              </div>
-            `).join("")}
-          </div>
-        </div>
-      ` : ""}
-
-      <div style="height:40px;"></div>
-    </div>`;
-}
-
-// ─── FINAL LEADERBOARD ───
-function renderFinalLeaderboard(state) {
-  const players = state.players ? Object.values(state.players) : [];
-  const ranked = players
-    .filter(p => p.joined)
-    .map(p => ({ ...p, totalSurplus: p.totalSurplus || 0 }))
-    .sort((a, b) => b.totalSurplus - a.totalSurplus);
-
-  const top3 = ranked.slice(0, 3);
-  const medals = ["🥇", "🥈", "🥉"];
-
-  document.getElementById("app").innerHTML = `
-    <div class="container" style="padding-top:24px;">
-      <div class="text-center mb-16">
-        <div style="font-size:56px;margin-bottom:8px;">🏆</div>
-        <h2 style="color:var(--yellow);font-size:22px;margin-bottom:4px;">Game Selesai!</h2>
-        <p style="color:var(--label);font-size:14px;">${state.good} — ${state.totalRounds} round</p>
-      </div>
-
-      <!-- Top 3 -->
-      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
-        ${top3.map((p, i) => `
-          <div class="card text-center" style="min-width:100px;flex:1;max-width:140px;border:2px solid ${i === 0 ? "var(--yellow)" : i === 1 ? "#c0c0c0" : "#cd7f32"};">
-            <div style="font-size:32px;">${medals[i]}</div>
-            <div style="color:var(--text);font-size:14px;font-weight:700;margin-top:4px;">${p.name || p.id}</div>
-            <div style="color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};font-size:11px;">${p.id} (${p.role === "buyer" ? "Buyer" : "Seller"})</div>
-            <div class="stat-num" style="color:var(--yellow);font-size:18px;margin-top:6px;">+${fmt(p.totalSurplus)}</div>
-            <div class="stat-label">Total Surplus</div>
-          </div>
-        `).join("")}
-      </div>
-
-      <!-- Full ranking -->
-      <div class="card">
-        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">📋 Ranking Lengkap</div>
-        <div style="max-height:400px;overflow-y:auto;">
-          ${ranked.map((p, i) => `
-            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-radius:4px;${i < 3 ? "background:var(--yellow-bg);" : i % 2 === 0 ? "background:var(--bg3);" : ""}">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <span style="color:var(--muted);font-size:12px;width:24px;text-align:right;font-family:'JetBrains Mono',monospace;">${i + 1}.</span>
-                <span style="color:${p.role === "buyer" ? "var(--cyan)" : "var(--red)"};font-size:11px;font-family:'JetBrains Mono',monospace;width:28px;">${p.id}</span>
-                <span style="color:var(--text);font-size:13px;">${p.name || "-"}</span>
-              </div>
-              <span style="color:${p.totalSurplus > 0 ? "var(--yellow)" : p.totalSurplus === 0 ? "var(--muted)" : "var(--red)"};font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;">
-                ${p.totalSurplus > 0 ? "+" : ""}${fmt(p.totalSurplus)}
-              </span>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-
-      <button class="btn btn-outline mt-16" onclick="window._resetMarket()" style="border-color:var(--red);color:var(--red);">🔄 Reset & Main Lagi</button>
 
       <div style="height:40px;"></div>
     </div>`;
@@ -806,57 +746,16 @@ function renderFinalLeaderboard(state) {
 function renderSetupScreen() {
   document.getElementById("app").innerHTML = `
     <div class="container" style="padding-top:30px;">
-      <h2 style="color:var(--yellow);margin-bottom:4px;">⚡ Setup Pasar Baru</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Room: <strong style="color:var(--cyan);">${roomCode}</strong></p>
+      <h2 style="color:var(--yellow);margin-bottom:4px;">⚡ Setup Pasar</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Room: <strong style="color:var(--cyan);">${roomCode}</strong> | Komoditas: <strong>Beras (1 kg)</strong></p>
 
-      <!-- Product selector -->
-      <div style="color:var(--label);font-size:12px;margin-bottom:8px;">Pilih komoditas</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;" id="product-grid">
-        ${Object.entries(SCENARIOS).map(([k, v]) => `
-          <div class="product-card ${k === "minyak" ? "active" : ""}" onclick="window._selectScenario('${k}')" data-key="${k}"
-            style="background:var(--bg2);border-radius:10px;padding:14px 10px;text-align:center;cursor:pointer;border:2px solid ${k === "minyak" ? "var(--cyan)" : "var(--border)"};transition:border-color 0.2s;">
-            <div style="font-size:32px;margin-bottom:4px;">${v.emoji}</div>
-            <div style="color:var(--text);font-size:14px;font-weight:600;">${v.label}</div>
-            <div style="color:var(--muted);font-size:11px;">${v.sub}</div>
-            <div style="color:var(--label);font-size:10px;margin-top:4px;">${fmt(v.sellerMin)}–${fmt(v.buyerMax)}</div>
-          </div>
-        `).join("")}
-        <div class="product-card" onclick="window._selectScenario('custom')" data-key="custom"
-          style="background:var(--bg2);border-radius:10px;padding:14px 10px;text-align:center;cursor:pointer;border:2px solid var(--border);transition:border-color 0.2s;grid-column:1/-1;">
-          <div style="font-size:28px;margin-bottom:4px;">✏️</div>
-          <div style="color:var(--text);font-size:14px;font-weight:600;">Custom / Input Sendiri</div>
-          <div style="color:var(--muted);font-size:11px;">Tentukan nama & range harga</div>
-        </div>
+      <div class="card mb-12" style="background:var(--cyan-bg);border:1px solid var(--cyan);">
+        <div style="color:var(--cyan);font-size:12px;font-weight:600;">📋 Fixed Schedule</div>
+        <div style="color:var(--label);font-size:11px;margin-top:6px;">Demand: Rp 18.000 – 8.000 (6 buyer)</div>
+        <div style="color:var(--label);font-size:11px;">Supply: Rp 6.000 – 16.000 (6 seller)</div>
+        <div style="color:var(--label);font-size:11px;">Schedule berulang untuk 42 mahasiswa.</div>
       </div>
 
-      <!-- Custom product form (hidden by default) -->
-      <div id="custom-form" style="display:none;" class="card mb-12">
-        <div style="color:var(--yellow);font-size:13px;font-weight:600;margin-bottom:10px;">✏️ Produk Custom</div>
-        <div class="setup-field">
-          <label>Nama Produk</label>
-          <input id="custom-good" placeholder="contoh: Kopi Robusta (1 kg)">
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div class="setup-field">
-            <label>Buyer WTP Min</label>
-            <input id="custom-bmin" type="number" value="10000" style="color:var(--cyan);">
-          </div>
-          <div class="setup-field">
-            <label>Buyer WTP Max</label>
-            <input id="custom-bmax" type="number" value="25000" style="color:var(--cyan);">
-          </div>
-          <div class="setup-field">
-            <label>Seller WTA Min</label>
-            <input id="custom-smin" type="number" value="8000" style="color:var(--red);">
-          </div>
-          <div class="setup-field">
-            <label>Seller WTA Max</label>
-            <input id="custom-smax" type="number" value="20000" style="color:var(--red);">
-          </div>
-        </div>
-      </div>
-
-      <!-- Settings -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
         <div class="card" style="margin-bottom:0;">
           <div style="color:var(--label);font-size:11px;margin-bottom:6px;">👥 Jumlah Mahasiswa</div>
@@ -864,66 +763,42 @@ function renderSetupScreen() {
         </div>
         <div class="card" style="margin-bottom:0;">
           <div style="color:var(--label);font-size:11px;margin-bottom:6px;">🔄 Jumlah Round</div>
-          <input id="num-rounds" type="number" value="3" min="1" max="10" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
+          <input id="num-rounds" type="number" value="2" min="1" max="3" style="font-family:'JetBrains Mono',monospace;font-size:20px;color:var(--yellow);text-align:center;">
         </div>
       </div>
 
-      <button class="btn btn-cyan" onclick="window._createMarket()" style="font-size:16px;">🚀 Buat Pasar →</button>
+      <button class="btn btn-cyan" onclick="window._createMarket()" style="font-size:16px;">🚀 Mulai →</button>
 
       <div style="height:40px;"></div>
     </div>`;
 }
 
-let selectedScenario = "minyak";
-
-window._selectScenario = function(key) {
-  selectedScenario = key;
-  document.querySelectorAll(".product-card").forEach(el => {
-    el.style.borderColor = el.dataset.key === key ? "var(--cyan)" : "var(--border)";
-  });
-  const customForm = document.getElementById("custom-form");
-  if (customForm) customForm.style.display = key === "custom" ? "block" : "none";
-};
-
 window._createMarket = async function() {
-  let sc;
-  if (selectedScenario === "custom") {
-    const goodName = document.getElementById("custom-good")?.value?.trim() || "Produk Custom";
-    sc = {
-      buyerMin: parseInt(document.getElementById("custom-bmin")?.value) || 10000,
-      buyerMax: parseInt(document.getElementById("custom-bmax")?.value) || 25000,
-      sellerMin: parseInt(document.getElementById("custom-smin")?.value) || 8000,
-      sellerMax: parseInt(document.getElementById("custom-smax")?.value) || 20000,
-      unit: "Rp",
-      good: goodName,
-    };
-  } else {
-    sc = SCENARIOS[selectedScenario];
-  }
   const total = parseInt(document.getElementById("num-students")?.value) || 42;
-  const totalRounds = parseInt(document.getElementById("num-rounds")?.value) || 3;
+  const totalRounds = parseInt(document.getElementById("num-rounds")?.value) || 2;
   const numSellers = Math.floor(total / 2);
   const numBuyers = total - numSellers;
+
+  const sched = getFixedSchedule(numBuyers, numSellers);
   const players = {};
 
   for (let i = 1; i <= numBuyers; i++) {
     const bid = `B${String(i).padStart(2, "0")}`;
-    players[bid] = { id: bid, role: "buyer", valuation: rng(sc.buyerMin, sc.buyerMax), name: "", joined: false, totalSurplus: 0 };
+    players[bid] = { id: bid, role: "buyer", valuation: sched.buyerWTPs[i-1], name: "", joined: false, totalSurplus: 0 };
   }
   for (let i = 1; i <= numSellers; i++) {
     const sid = `S${String(i).padStart(2, "0")}`;
-    players[sid] = { id: sid, role: "seller", valuation: rng(sc.sellerMin, sc.sellerMax), name: "", joined: false, totalSurplus: 0 };
+    players[sid] = { id: sid, role: "seller", valuation: sched.sellerWTAs[i-1], name: "", joined: false, totalSurplus: 0 };
   }
 
   await set(marketRef(), {
     phase: "join",
-    good: sc.good,
-    unit: sc.unit,
+    good: "Beras",
+    unit: "Rp",
     round: 1,
     totalRounds: totalRounds,
     numBuyers: numBuyers,
     numSellers: numSellers,
-    scenarioConfig: { buyerMin: sc.buyerMin, buyerMax: sc.buyerMax, sellerMin: sc.sellerMin, sellerMax: sc.sellerMax },
     players: players,
     trades: {},
     pending: {},
@@ -934,7 +809,6 @@ window._createMarket = async function() {
     tax: null,
     createdAt: Date.now(),
   });
-  // Store teacher hash for this room
   if (teacherHash) {
     await set(ref(db, `rooms/${roomCode}/teacherHash`), teacherHash);
   }
@@ -953,8 +827,8 @@ window._closeTrading = async function() {
 
   const trades = state.trades ? Object.values(state.trades) : [];
   const updates = {};
+  const dwlData = calculateDWL(state);
 
-  // Calculate surplus for each trade and accumulate to players
   trades.forEach(t => {
     const buyer = state.players[t.buyerId];
     const seller = state.players[t.sellerId];
@@ -966,22 +840,20 @@ window._closeTrading = async function() {
     }
   });
 
-  // Save round history
   updates[`roundHistory/round_${state.round}`] = {
     trades: state.trades || {},
     round: state.round,
+    dwlCalculation: dwlData,
     shockLabel: state.shockLabel || null,
     priceCeiling: state.priceCeiling || null,
   };
 
   const currentRound = state.round || 1;
-  const totalRounds = state.totalRounds || 3;
+  const totalRounds = state.totalRounds || 2;
 
   if (currentRound >= totalRounds) {
-    // Final round — show leaderboard
     updates["phase"] = "final";
   } else {
-    // Show results, then dosen can start next round
     updates["phase"] = "results";
   }
 
@@ -993,15 +865,14 @@ window._nextRound = async function() {
   const state = snap.val();
   if (!state) return;
 
-  const sc = state.scenarioConfig || SCENARIOS[selectedScenario] || { buyerMin: 10000, buyerMax: 22000, sellerMin: 8000, sellerMax: 18000 };
+  const sched = getFixedSchedule(state.numBuyers, state.numSellers);
   const updates = {};
 
-  // Re-randomize valuations for new round
-  Object.entries(state.players).forEach(([id, p]) => {
+  Object.entries(state.players).forEach(([id, p], idx) => {
     if (p.role === "buyer") {
-      updates[`players/${id}/valuation`] = rng(sc.buyerMin, sc.buyerMax);
+      updates[`players/${id}/valuation`] = sched.buyerWTPs[parseInt(id.substring(1))-1];
     } else {
-      updates[`players/${id}/valuation`] = rng(sc.sellerMin, sc.sellerMax);
+      updates[`players/${id}/valuation`] = sched.sellerWTAs[parseInt(id.substring(1))-1];
     }
   });
 
@@ -1020,7 +891,7 @@ window._nextRound = async function() {
 };
 
 window._resetMarket = async function() {
-  if (!confirm("Reset pasar? Semua data akan hilang.")) return;
+  if (!confirm("Reset pasar?")) return;
   await set(marketRef(), { phase: "idle" });
 };
 
@@ -1031,62 +902,65 @@ window._applyShock = async function(type) {
 
   const updates = {};
 
-  if (type === "demand_up") {
-    Object.entries(state.players).forEach(([id, p]) => {
-      if (p.role === "buyer") {
-        updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
-      }
-    });
-    updates["shockLabel"] = "📈 Demand Shock: WTP semua buyer naik 30% (pendapatan konsumen naik)";
-  } else if (type === "demand_down") {
-    Object.entries(state.players).forEach(([id, p]) => {
-      if (p.role === "buyer") {
-        updates[`players/${id}/valuation`] = Math.round(p.valuation * 0.7);
-      }
-    });
-    updates["shockLabel"] = "📉 Demand Shock: WTP semua buyer turun 30% (resesi, konsumen hemat)";
-  } else if (type === "supply_up") {
+  if (type === "supply_up") {
     Object.entries(state.players).forEach(([id, p]) => {
       if (p.role === "seller") {
         updates[`players/${id}/valuation`] = Math.round(p.valuation * 1.3);
       }
     });
-    updates["shockLabel"] = "📈 Supply Shock: biaya produksi naik 30% (harga input naik, gagal panen)";
+    updates["shockLabel"] = "💰 PAJAK: Biaya seller naik 30% (WTA naik)";
   } else if (type === "supply_down") {
     Object.entries(state.players).forEach(([id, p]) => {
       if (p.role === "seller") {
         updates[`players/${id}/valuation`] = Math.round(p.valuation * 0.7);
       }
     });
-    updates["shockLabel"] = "📉 Supply Shock: biaya produksi turun 30% (teknologi baru, panen melimpah)";
-  } else if (type === "price_ceiling") {
-    const eq = computeEquilibrium(state);
-    updates["priceCeiling"] = Math.round(eq.price * 0.7);
-    updates["tax"] = null;
-    updates["shockLabel"] = `⛔ Price Ceiling: HET ${fmt(Math.round(eq.price * 0.7))} (pemerintah tetapkan harga maksimum)`;
-  } else if (type === "tax") {
-    const eq = computeEquilibrium(state);
-    const taxAmount = Math.round(eq.price * 0.3);
-    // Tax = seller WTA naik sebesar pajak (seller harus cover pajak)
-    Object.entries(state.players).forEach(([id, p]) => {
-      if (p.role === "seller") {
-        updates[`players/${id}/valuation`] = p.valuation + taxAmount;
-      }
-    });
-    updates["tax"] = taxAmount;
-    updates["priceCeiling"] = null;
-    updates["shockLabel"] = `💰 Pajak: Rp${fmt(taxAmount)} per unit (30% dari P*). Seller harus cover pajak dari harga jual.`;
+    updates["shockLabel"] = "📉 NORMAL: Biaya seller turun (pajak dihapus)";
   }
 
   updates["trades"] = {};
   updates["pending"] = {};
   updates["phase"] = "trade";
-  updates["round"] = (state.round || 1) + 1;
 
   await update(marketRef(), updates);
 };
 
-// ─── STUDENT VIEW ───
+function renderFinalLeaderboard(state) {
+  const players = state.players ? Object.values(state.players) : [];
+  const ranked = players
+    .filter(p => p.joined)
+    .map(p => ({ ...p, totalSurplus: p.totalSurplus || 0 }))
+    .sort((a, b) => b.totalSurplus - a.totalSurplus);
+
+  document.getElementById("app").innerHTML = `
+    <div class="container" style="padding-top:24px;">
+      <div class="text-center mb-16">
+        <div style="font-size:56px;margin-bottom:8px;">🏆</div>
+        <h2 style="color:var(--yellow);font-size:22px;margin-bottom:4px;">Selesai!</h2>
+      </div>
+
+      <div class="card">
+        <div style="color:var(--label);font-size:12px;margin-bottom:8px;">📋 Ranking</div>
+        <div style="max-height:400px;overflow-y:auto;">
+          ${ranked.slice(0, 15).map((p, i) => `
+            <div style="display:flex;justify-content:space-between;padding:8px 10px;border-radius:4px;${i % 2 === 0 ? "background:var(--bg3);" : ""}">
+              <span style="color:var(--text);font-size:13px;">${i+1}. ${p.id}</span>
+              <span style="color:var(--yellow);font-weight:700;font-family:'JetBrains Mono',monospace;">+${fmt(p.totalSurplus)}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+
+      <button class="btn btn-outline mt-16" onclick="window._resetMarket()" style="border-color:var(--red);color:var(--red);">Reset</button>
+
+      <div style="height:40px;"></div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// STUDENT VIEW
+// ════════════════════════════════════════════════════════════════
+
 function showStudent(playerId) {
   if (unsubscribe) unsubscribe();
 
@@ -1100,18 +974,11 @@ function showStudent(playerId) {
 function renderStudentUI(playerId) {
   const state = marketState;
 
-  // Save current input values before re-render
-  const savedPartner = document.getElementById("partner-input")?.value || "";
-  const savedPrice = document.getElementById("price-input")?.value || "";
-  const savedMsg = document.getElementById("trade-msg")?.innerHTML || "";
-
   if (!state || !state.players || !state.players[playerId]) {
     document.getElementById("app").innerHTML = `
       <div class="container text-center" style="padding-top:80px;">
         <div style="font-size:48px;margin-bottom:16px;">🚫</div>
-        <h2 style="color:var(--red);font-size:18px;margin-bottom:8px;">ID "${playerId}" tidak ditemukan</h2>
-        <p style="color:var(--label);font-size:14px;margin-bottom:24px;">Pastikan dosen sudah membuat pasar dan ID kamu benar (B01–B${String(state.numBuyers||99).padStart(2,"0")} atau S01–S${String(state.numSellers||99).padStart(2,"0")}).</p>
-        <button class="btn btn-outline" onclick="window._back()">← Kembali</button>
+        <h2 style="color:var(--red);font-size:18px;">ID tidak ditemukan</h2>
       </div>`;
     return;
   }
@@ -1121,15 +988,13 @@ function renderStudentUI(playerId) {
   const trades = getTradesArray(state);
   const myTrade = trades.find(t => t.buyerId === playerId || t.sellerId === playerId);
 
-  // Not joined yet
   if (!me.joined) {
     document.getElementById("app").innerHTML = `
       <div class="container text-center" style="padding-top:60px;">
         <span class="badge mb-16" style="background:${isBuyer ? "var(--cyan-bg)" : "var(--red-bg)"};color:${isBuyer ? "var(--cyan)" : "var(--red)"};">
           ${playerId} — ${isBuyer ? "🛒 BUYER" : "🏪 SELLER"}
         </span>
-        <h2 style="margin-bottom:8px;">Masuk ke Pasar</h2>
-        <p style="color:var(--label);font-size:14px;margin-bottom:20px;">Masukkan nama kamu untuk bergabung.</p>
+        <h2 style="margin-bottom:8px;">Masuk</h2>
         <input id="name-input" placeholder="Nama kamu" class="mb-12"
           onkeydown="if(event.key==='Enter')window._joinGame('${playerId}')">
         <button class="btn ${isBuyer ? "btn-cyan" : "btn-red"}" onclick="window._joinGame('${playerId}')">Gabung</button>
@@ -1137,7 +1002,6 @@ function renderStudentUI(playerId) {
     return;
   }
 
-  // Joined — show player card + trading UI
   const surplus = myTrade ? (isBuyer ? me.valuation - myTrade.price : myTrade.price - me.valuation) : null;
 
   let phaseUI = "";
@@ -1146,95 +1010,108 @@ function renderStudentUI(playerId) {
     phaseUI = `
       <div class="text-center" style="padding:30px;">
         <div style="font-size:40px;" class="waiting-pulse mb-8">⏳</div>
-        <div style="font-size:16px;">Menunggu dosen membuka trading...</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:8px;">Valuasimu sudah ditetapkan. Jangan kasih tahu orang lain!</div>
+        <div style="font-size:16px;">Menunggu dosen buka trading...</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:8px;">Valuasimu: Rp${fmt(me.valuation)}</div>
       </div>`;
   } else if (state.phase === "trade" && !myTrade) {
-    // Check if I have a pending submission
-    let myPendingInfo = "";
-    if (state.pending) {
-      for (const [key, val] of Object.entries(state.pending)) {
-        if (val[playerId]) {
-          const p = val[playerId];
-          myPendingInfo = `
-            <div class="msg msg-warn mb-12">
-              ⏳ Kamu sudah submit: partner <strong>${p.partnerId}</strong>, harga <strong>${fmt(p.price)}</strong>. Menunggu ${p.partnerId} input harga yang sama...
-            </div>`;
-          break;
-        }
-      }
-    }
-
     phaseUI = `
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-        <h3 style="color:var(--yellow);font-size:16px;margin:0;">🤝 Buat Transaksi</h3>
-        ${state.deadline ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--cyan);">${formatCountdown(getTimeRemaining(state))}</div>` : `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--muted);">--:--</div>`}
+        <h3 style="color:var(--yellow);font-size:16px;margin:0;">🤝 Nego</h3>
+        ${state.deadline ? `<div id="countdown-display" style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:800;color:var(--cyan);">${formatCountdown(getTimeRemaining(state))}</div>` : ""}
       </div>
-      <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Nego dengan mahasiswa lain di kelas. Kedua pihak harus input partner ID dan harga yang <strong style="color:var(--yellow);">SAMA PERSIS</strong>.</p>
-      ${myPendingInfo}
+      <p style="color:var(--label);font-size:13px;margin-bottom:14px;">Input ID partner dan harga yang <strong>SAMA PERSIS</strong>.</p>
       <div class="setup-field">
-        <label>Partner ID (contoh: ${isBuyer ? "S05" : "B12"})</label>
+        <label>Partner ID</label>
         <input id="partner-input" placeholder="${isBuyer ? "S01" : "B01"}" style="text-transform:uppercase;font-family:'JetBrains Mono',monospace;">
       </div>
       <div class="setup-field">
-        <label>Harga kesepakatan (Rp)</label>
-        <input id="price-input" type="number" placeholder="15000" style="color:var(--yellow);font-size:18px;font-family:'JetBrains Mono',monospace;">
+        <label>Harga</label>
+        <input id="price-input" type="number" placeholder="12000" style="color:var(--yellow);font-size:18px;font-family:'JetBrains Mono',monospace;">
       </div>
-      <button class="btn btn-purple mt-12" onclick="window._submitTrade('${playerId}')">✅ Submit Transaksi</button>
+      <button class="btn btn-purple mt-12" onclick="window._submitTrade('${playerId}')">Submit</button>
       <div id="trade-msg"></div>`;
   } else if (myTrade) {
     phaseUI = `
       <div class="card text-center">
         <div style="font-size:36px;margin-bottom:8px;">🎉</div>
-        <div style="font-size:16px;font-weight:600;">Transaksi Selesai!</div>
-        <div class="grid-2 mt-12">
-          <div>
-            <div class="stat-label">Harga Deal</div>
+        <div style="grid-template-columns:1fr 1fr;gap:10px;display:grid;margin-top:12px;">
+          <div class="card" style="margin:0;background:var(--purple-bg);border:1px solid var(--purple);">
+            <div class="stat-label">Deal</div>
             <div class="stat-num" style="color:var(--purple);">${fmt(myTrade.price)}</div>
           </div>
-          <div>
-            <div class="stat-label">Surplus Kamu</div>
+          <div class="card" style="margin:0;">
+            <div class="stat-label">Surplus</div>
             <div class="stat-num" style="color:${surplus >= 0 ? "var(--cyan)" : "var(--red)"};">${surplus >= 0 ? "+" : ""}${fmt(surplus)}</div>
           </div>
         </div>
-        <div style="margin-top:10px;color:var(--muted);font-size:12px;">Partner: ${isBuyer ? myTrade.sellerId : myTrade.buyerId}</div>
       </div>`;
   }
 
   if (state.phase === "results") {
     phaseUI += `
       <div class="mt-16">
-        <h3 style="color:var(--purple);font-size:16px;margin-bottom:8px;">📊 Hasil Round ${state.round || 1}/${state.totalRounds || "?"}</h3>
-        ${renderChart(state)}
-        <div class="card mt-12 text-center">
-          <div class="stat-label">Total Surplus Kamu (semua round)</div>
-          <div class="stat-num" style="color:var(--yellow);font-size:22px;">+${fmt(me.totalSurplus || 0)}</div>
+        <div class="card text-center">
+          <div class="stat-label">Total (semua round)</div>
+          <div class="stat-num" style="color:var(--yellow);">+${fmt(me.totalSurplus || 0)}</div>
         </div>
-        <div style="color:var(--muted);font-size:13px;margin-top:10px;text-align:center;" class="waiting-pulse">⏳ Menunggu dosen memulai round berikutnya...</div>
+        
+        ${(() => {
+          const dwlData = calculateDWL(state);
+          if (!dwlData) return "";
+          return `
+            <div class="card mt-12" style="background:var(--red-bg);border:1px solid var(--red);">
+              <div style="color:var(--red);font-size:13px;font-weight:600;margin-bottom:10px;">📊 DWL Round ${state.round || 1}</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+                <div style="background:var(--bg2);padding:8px;border-radius:6px;">
+                  <div style="color:var(--label);font-size:10px;">P* Teori</div>
+                  <div style="color:var(--yellow);font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmt(dwlData.eqPrice)}</div>
+                </div>
+                <div style="background:var(--bg2);padding:8px;border-radius:6px;">
+                  <div style="color:var(--label);font-size:10px;">Q* Teori</div>
+                  <div style="color:var(--yellow);font-size:16px;font-weight:800;font-family:'JetBrains Mono',monospace;">${dwlData.eqQuantity}</div>
+                </div>
+              </div>
+              <div style="background:var(--bg3);padding:10px;border-radius:6px;margin-bottom:10px;">
+                <table style="width:100%;font-size:11px;">
+                  <tr style="border-bottom:1px solid var(--border);">
+                    <td style="color:var(--label);padding:4px 0;">Total Surplus (baseline)</td>
+                    <td style="text-align:right;color:var(--cyan);font-weight:700;font-family:'JetBrains Mono',monospace;padding:4px 0;">Rp${fmt(dwlData.totalSurplusBaseline)}</td>
+                  </tr>
+                  <tr style="border-bottom:1px solid var(--border);">
+                    <td style="color:var(--label);padding:4px 0;">Total Surplus (aktual)</td>
+                    <td style="text-align:right;color:var(--cyan);font-weight:700;font-family:'JetBrains Mono',monospace;padding:4px 0;">Rp${fmt(dwlData.totalSurplusActual)}</td>
+                  </tr>
+                  <tr style="background:var(--red-bg);border:1px solid var(--red);">
+                    <td style="color:var(--red);font-weight:700;padding:6px 0;">DWL</td>
+                    <td style="text-align:right;color:var(--red);font-weight:800;font-family:'JetBrains Mono',monospace;font-size:12px;padding:6px 0;">Rp${fmt(dwlData.dwl)}</td>
+                  </tr>
+                </table>
+              </div>
+              <div style="background:var(--bg2);padding:8px;border-radius:6px;text-align:left;">
+                <div style="color:var(--label);font-size:10px;margin-bottom:6px;"><strong>Analisis:</strong></div>
+                <div style="color:var(--label);font-size:10px;line-height:1.4;">
+                  Transaksi: ${dwlData.numTrades}/${dwlData.eqQuantity}. ${dwlData.lostTrades} transaksi hilang.
+                  <br>Loss efficiency: Rp${fmt(dwlData.dwl)} karena ${state.tax ? "pajak" : state.priceCeiling ? "HET" : "shock"}.
+                </div>
+              </div>
+            </div>
+          `;
+        })()}
+
+        <div style="color:var(--muted);font-size:13px;margin-top:10px;text-align:center;" class="waiting-pulse">⏳ Round berikutnya...</div>
       </div>`;
   }
 
   if (state.phase === "final") {
     const allPlayers = Object.values(state.players).filter(p => p.joined).sort((a, b) => (b.totalSurplus || 0) - (a.totalSurplus || 0));
     const myRank = allPlayers.findIndex(p => p.id === playerId) + 1;
-    const medals = ["🥇", "🥈", "🥉"];
     phaseUI = `
       <div class="text-center" style="padding:20px 0;">
-        <div style="font-size:56px;margin-bottom:8px;">${myRank <= 3 ? medals[myRank - 1] : "🏆"}</div>
-        <h2 style="color:var(--yellow);font-size:20px;margin-bottom:4px;">Game Selesai!</h2>
-        <p style="color:var(--label);font-size:14px;margin-bottom:16px;">Peringkat kamu: <strong style="color:var(--yellow);">#${myRank}</strong> dari ${allPlayers.length} pemain</p>
+        <div style="font-size:48px;margin-bottom:8px;">🏆</div>
+        <h2 style="color:var(--yellow);font-size:20px;margin-bottom:4px;">Peringkat #${myRank}/${allPlayers.length}</h2>
         <div class="card">
-          <div class="stat-label">Total Surplus Kamu</div>
-          <div class="stat-num" style="color:var(--yellow);font-size:28px;">${(me.totalSurplus || 0) > 0 ? "+" : ""}${fmt(me.totalSurplus || 0)}</div>
-        </div>
-        <div class="card mt-12" style="text-align:left;">
-          <div style="color:var(--label);font-size:12px;margin-bottom:8px;">🏆 Top 10</div>
-          ${allPlayers.slice(0, 10).map((p, i) => `
-            <div style="display:flex;justify-content:space-between;padding:6px 8px;border-radius:4px;${p.id === playerId ? "background:var(--yellow-bg);border:1px solid var(--yellow);" : i % 2 === 0 ? "background:var(--bg3);" : ""}">
-              <span style="color:${p.id === playerId ? "var(--yellow)" : "var(--text)"};font-size:13px;">${i < 3 ? medals[i] : (i+1)+"."} ${p.name || p.id}</span>
-              <span style="color:var(--yellow);font-size:13px;font-family:'JetBrains Mono',monospace;font-weight:700;">+${fmt(p.totalSurplus || 0)}</span>
-            </div>
-          `).join("")}
+          <div class="stat-label">Total Surplus</div>
+          <div class="stat-num" style="color:var(--yellow);">${(me.totalSurplus || 0) > 0 ? "+" : ""}${fmt(me.totalSurplus || 0)}</div>
         </div>
       </div>`;
   }
@@ -1242,52 +1119,28 @@ function renderStudentUI(playerId) {
   document.getElementById("app").innerHTML = `
     <div class="container">
       <div style="background:${isBuyer ? "linear-gradient(135deg, #0d2520, #0a1a18)" : "linear-gradient(135deg, #200d0d, #1a0a0a)"};border-radius:12px;padding:16px;margin-bottom:16px;border:2px solid ${isBuyer ? "#4ecdc430" : "#ff6b6b30"};">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;justify-content:space-between;">
           <div>
-            <div style="color:var(--label);font-size:11px;">${playerId} — ${me.name} | Round ${state.round || 1}/${state.totalRounds || "?"}</div>
-            <div style="color:${isBuyer ? "var(--cyan)" : "var(--red)"};font-size:22px;font-weight:800;margin-top:4px;">
+            <div style="color:var(--label);font-size:11px;">${playerId} — ${me.name} | R${state.round || 1}</div>
+            <div style="color:${isBuyer ? "var(--cyan)" : "var(--red)"};font-size:20px;font-weight:800;margin-top:4px;">
               ${isBuyer ? "🛒 BUYER" : "🏪 SELLER"}
             </div>
           </div>
           <div style="text-align:right;">
             <div style="color:var(--label);font-size:11px;">${isBuyer ? "Max WTP" : "Min WTA"}</div>
-            <div style="color:var(--yellow);font-size:24px;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmt(me.valuation)}</div>
+            <div style="color:var(--yellow);font-size:22px;font-weight:800;font-family:'JetBrains Mono',monospace;">${fmt(me.valuation)}</div>
           </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;margin-top:10px;padding:8px 12px;background:#0a0f1a80;border-radius:6px;font-size:12px;color:var(--label);">
-          <span>${isBuyer
-            ? `Max bayar Rp${fmt(me.valuation)} untuk ${state.good}`
-            : `Min jual Rp${fmt(me.valuation)} untuk ${state.good}`}</span>
-          <span style="color:var(--yellow);font-weight:700;">Σ +${fmt(me.totalSurplus || 0)}</span>
         </div>
       </div>
 
-      ${state.priceCeiling ? `<div class="msg msg-err mb-12">⛔ HET aktif: harga tidak boleh di atas ${fmt(state.priceCeiling)}</div>` : ""}
-      ${state.tax ? `<div class="msg mb-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak aktif: Rp${fmt(state.tax)} per unit ditanggung seller</div>` : ""}
+      ${state.tax ? `<div class="msg mb-12" style="background:var(--purple-bg);color:var(--purple);border:1px solid var(--purple);">💰 Pajak: Rp${fmt(state.tax)}/unit (seller)</div>` : ""}
       ${state.shockLabel ? `<div class="msg msg-warn mb-12">${state.shockLabel}</div>` : ""}
 
       ${phaseUI}
 
       <div style="height:40px;"></div>
     </div>`;
-
-  // Restore input values after re-render
-  const partnerEl = document.getElementById("partner-input");
-  const priceEl = document.getElementById("price-input");
-  const msgEl = document.getElementById("trade-msg");
-  if (partnerEl && savedPartner) partnerEl.value = savedPartner;
-  if (priceEl && savedPrice) priceEl.value = savedPrice;
-  if (msgEl && savedMsg) msgEl.innerHTML = savedMsg;
 }
-
-window._back = function() {
-  currentRole = null;
-  if (roomCode) {
-    showRoomRoleSelect();
-  } else {
-    showRoleSelect();
-  }
-};
 
 window._joinGame = async function(playerId) {
   const nameInput = document.getElementById("name-input");
@@ -1306,99 +1159,79 @@ window._submitTrade = async function(playerId) {
 
   const showMsg = (text, ok, warn) => {
     const cls = ok ? "msg-ok" : warn ? "msg-warn" : "msg-err";
-    if (msgEl) msgEl.innerHTML = `<div class="msg ${cls} mt-12">${text}</div>`;
+    if (msgEl) msgEl.innerHTML = `<div class="msg ${cls} mt-12" style="font-size:12px;">${text}</div>`;
   };
 
-  if (!partnerRaw || !priceRaw) { showMsg("❌ Isi partner ID dan harga", false); return; }
+  if (!partnerRaw || !priceRaw) { showMsg("Isi partner ID dan harga", false); return; }
 
-  // Check if time is up
   if (marketState?.deadline && Date.now() > marketState.deadline) {
-    showMsg("⏰ Waktu habis! Tidak bisa submit transaksi.", false); return;
+    showMsg("Waktu habis", false); return;
   }
 
-  // Get fresh state
   const snap = await get(marketRef());
   const state = snap.val();
-  if (!state || !state.players) { showMsg("❌ Market belum aktif", false); return; }
+  if (!state || !state.players) { showMsg("Market error", false); return; }
 
   const me = state.players[playerId];
-  if (!me) { showMsg("❌ Player tidak ditemukan", false); return; }
+  if (!me) { showMsg("Player error", false); return; }
 
   const isBuyer = me.role === "buyer";
   const partner = state.players[partnerRaw];
-  if (!partner) { showMsg(`❌ ID "${partnerRaw}" tidak ditemukan`, false); return; }
+  if (!partner) { showMsg(`ID "${partnerRaw}" tidak ada`, false); return; }
 
-  // Check price ceiling
-  if (state.priceCeiling && priceRaw > state.priceCeiling) {
-    showMsg(`⛔ Harga melebihi HET (${fmt(state.priceCeiling)})`, false); return;
-  }
+  if (isBuyer && partner.role !== "seller") { showMsg("Partner harus seller", false); return; }
+  if (!isBuyer && partner.role !== "buyer") { showMsg("Partner harus buyer", false); return; }
 
-  // Validate roles
-  if (isBuyer && partner.role !== "seller") { showMsg("❌ Partner harus seller (S01–S..)", false); return; }
-  if (!isBuyer && partner.role !== "buyer") { showMsg("❌ Partner harus buyer (B01–B..)", false); return; }
+  if (isBuyer && priceRaw > me.valuation) { showMsg(`Harga > WTP (${fmt(me.valuation)})`, false); return; }
+  if (!isBuyer && priceRaw < me.valuation) { showMsg(`Harga < WTA (${fmt(me.valuation)})`, false); return; }
 
-  // Validate price against valuations
-  if (isBuyer && priceRaw > me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} melebihi WTP kamu (${fmt(me.valuation)})`, false); return; }
-  if (!isBuyer && priceRaw < me.valuation) { showMsg(`❌ Harga ${fmt(priceRaw)} di bawah WTA kamu (${fmt(me.valuation)})`, false); return; }
-
-  // Check not already traded
   const existingTrades = state.trades ? Object.values(state.trades) : [];
   if (existingTrades.find(t => t.buyerId === playerId || t.sellerId === playerId)) {
-    showMsg("❌ Kamu sudah bertransaksi di round ini", false); return;
+    showMsg("Sudah bertransaksi", false); return;
   }
   if (existingTrades.find(t => t.buyerId === partnerRaw || t.sellerId === partnerRaw)) {
-    showMsg("❌ Partner sudah bertransaksi", false); return;
+    showMsg("Partner sudah bertransaksi", false); return;
   }
 
-  // === DOUBLE CONFIRMATION SYSTEM ===
   const buyerId = isBuyer ? playerId : partnerRaw;
   const sellerId = isBuyer ? partnerRaw : playerId;
   const pendingKey = `${buyerId}_${sellerId}`;
 
-  // Save my submission as pending
   await update(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), {
     partnerId: partnerRaw,
     price: priceRaw,
     time: Date.now()
   });
 
-  // Check if partner already submitted
   const pendingSnap = await get(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${partnerRaw}`));
   const partnerPending = pendingSnap.val();
 
   if (!partnerPending) {
-    // Partner belum submit
-    showMsg(`⏳ Menunggu ${partnerRaw} konfirmasi. Kamu submit harga ${fmt(priceRaw)}. Partner harus input harga yang SAMA.`, false, true);
+    showMsg(`Tunggu ${partnerRaw} konfirmasi (${fmt(priceRaw)})`, false, true);
     return;
   }
 
-  // Partner sudah submit — cek harga sama
   if (partnerPending.price !== priceRaw) {
-    showMsg(`❌ Harga tidak cocok! Kamu: ${fmt(priceRaw)}, ${partnerRaw}: ${fmt(partnerPending.price)}. Nego ulang dan pastikan harga SAMA persis.`, false);
-    // Hapus pending saya supaya bisa re-submit
+    showMsg(`Harga tidak cocok: Kamu ${fmt(priceRaw)}, ${partnerRaw} ${fmt(partnerPending.price)}`, false);
     await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), null);
     return;
   }
 
-  // Partner ID cross-check
   if (partnerPending.partnerId !== playerId) {
-    showMsg(`❌ ${partnerRaw} tidak memilih kamu sebagai partner.`, false);
+    showMsg(`${partnerRaw} tidak pilih kamu`, false);
     await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}/${playerId}`), null);
     return;
   }
 
-  // === MATCH! Harga sama, partner sama — finalize trade ===
   await update(ref(db, `rooms/${roomCode}/market/trades/${pendingKey}`), {
     buyerId, sellerId, price: priceRaw, time: Date.now()
   });
 
-  // Clean up pending
   await set(ref(db, `rooms/${roomCode}/market/pending/${pendingKey}`), null);
 
-  showMsg("✅ Transaksi berhasil! Kedua pihak setuju.", true);
+  showMsg("✅ Transaksi OK!", true);
 };
 
-// ─── START ───
 init();
 
 </script>
